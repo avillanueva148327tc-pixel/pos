@@ -28,6 +28,7 @@ import AdminPINModal from './components/AdminPINModal';
 import ConfirmModal from './components/ConfirmModal';
 import BarcodeScanner, { ScanResultStatus } from './components/BarcodeScanner';
 import FinancialPulseModal from './components/FinancialPulseModal';
+import HardwareSettingsModal from './components/HardwareSettingsModal';
 import { translations } from './translations';
 import { SecurityService } from './services/securityService';
 import { TransactionService } from './services/transactionService';
@@ -139,6 +140,7 @@ export default function App() {
   const [showAdminAuth, setShowAdminAuth] = useState<{ onVerify: () => void } | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [showFinancialPulse, setShowFinancialPulse] = useState(false);
+  const [showHardwareSettings, setShowHardwareSettings] = useState(false);
 
   // --- EFFECTS (Load/Save) ---
   useEffect(() => {
@@ -313,11 +315,13 @@ export default function App() {
           if (bItem.productId) {
               const idx = newInventory.findIndex(i => i.id === bItem.productId);
               if (idx >= 0) {
-                  newInventory[idx].stock += bItem.quantity;
-                  // Update cost price if provided (Moving Average or Last Cost strategy)
-                  if (bItem.costPerUnit > 0) {
-                    newInventory[idx].originalPrice = bItem.costPerUnit; 
-                  }
+                  // Create new object to avoid state mutation
+                  newInventory[idx] = {
+                      ...newInventory[idx],
+                      stock: newInventory[idx].stock + bItem.quantity,
+                      // Update cost price if provided (Last Purchase Price strategy)
+                      originalPrice: bItem.costPerUnit > 0 ? bItem.costPerUnit : newInventory[idx].originalPrice
+                  };
               }
           }
       });
@@ -336,13 +340,32 @@ export default function App() {
              const combined = [...inventory];
              data.inventory.forEach((ni: any) => {
                 const exists = combined.findIndex(i => i.name === ni.name);
-                if (exists >= 0) combined[exists] = { ...combined[exists], stock: combined[exists].stock + ni.stock };
-                else combined.push(ni);
+                if (exists >= 0) {
+                    // Smart Merge: Accumulate stock, update pricing/details if changed in CSV
+                    combined[exists] = { 
+                        ...combined[exists], 
+                        stock: combined[exists].stock + (ni.stock || 0),
+                        price: ni.price !== undefined ? ni.price : combined[exists].price,
+                        originalPrice: ni.originalPrice !== undefined ? ni.originalPrice : combined[exists].originalPrice,
+                        category: ni.category || combined[exists].category,
+                        barcode: ni.barcode || combined[exists].barcode
+                    };
+                } else {
+                    combined.push(ni);
+                }
              });
              setInventory(combined);
           }
-          if (data.customers) setCustomers([...customers, ...data.customers]);
-          if (data.records) setRecords([...records, ...data.records]);
+          if (data.customers) {
+             // Prevent duplicate customers
+             const newCustomers = data.customers.filter((nc: any) => !customers.some(c => c.name === nc.name));
+             setCustomers([...customers, ...newCustomers]);
+          }
+          if (data.records) {
+             // Prevent duplicate records (by ID)
+             const newRecords = data.records.filter((nr: any) => !records.some(r => r.id === nr.id));
+             setRecords([...records, ...newRecords]);
+          }
       }
   };
 
@@ -639,6 +662,11 @@ export default function App() {
                        <p className="font-black text-xs uppercase dark:text-white">Financial Pulse</p>
                        <p className="text-[10px] text-slate-400">View real-time metrics</p>
                     </button>
+                    <button onClick={() => setShowHardwareSettings(true)} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
+                       <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">🖨️</span>
+                       <p className="font-black text-xs uppercase dark:text-white">Hardware Settings</p>
+                       <p className="text-[10px] text-slate-400">Connect Printer & Scanner</p>
+                    </button>
                     <button onClick={() => setShowReceipt({ record: records[0] || MOCK_PREVIEW_RECORD, autoPrint: false })} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
                        <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">🧾</span>
                        <p className="font-black text-xs uppercase dark:text-white">Receipt Template</p>
@@ -740,6 +768,7 @@ export default function App() {
       {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
       {showAdminAuth && <AdminPINModal adminPinHash={adminPinHash} onVerify={showAdminAuth.onVerify} onCancel={() => setShowAdminAuth(null)} />}
       {showConfirm && <ConfirmModal isOpen={true} title={showConfirm.title} message={showConfirm.message} onConfirm={showConfirm.onConfirm} onCancel={() => setShowConfirm(null)} />}
+      {showHardwareSettings && <HardwareSettingsModal onClose={() => setShowHardwareSettings(false)} />}
       {showScanner && <BarcodeScanner onScan={(code) => {
             let customerId = code; if (code.startsWith('CID:')) { customerId = code.replace('CID:', ''); }
             const customer = customers.find(c => c.id === customerId || c.barcode === code);

@@ -83,7 +83,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const [pendingTransactionIsPaid, setPendingTransactionIsPaid] = useState<boolean>(true);
   
   // Merge Prompt State
-  const [mergePrompt, setMergePrompt] = useState<{ show: boolean, existingAmount: number } | null>(null);
+  const [mergePrompt, setMergePrompt] = useState<{ show: boolean, existingAmount: number, customerName: string } | null>(null);
   const [pendingForceNew, setPendingForceNew] = useState(false);
 
   // Stock Warning State
@@ -242,7 +242,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     } else {
       setAuthError(true);
       setAuthPin('');
-      setTimeout(() => setAuthError(false), 2000);
+      setTimeout(() => { setAuthError(false), 2000 });
     }
   };
 
@@ -291,11 +291,17 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     setPendingTransactionIsPaid(isPaid);
 
     if (!isPaid && !isWalkIn) {
-      const existingRecord = records.find(r => r.customerName === (selectedCustomer?.name || customerName) && !r.isPaid);
+      const targetName = selectedCustomer?.name || customerName;
+      // Case-insensitive check for existing unpaid records
+      const existingRecord = records.find(r => 
+        r.customerName.toLowerCase() === targetName.toLowerCase() && !r.isPaid
+      );
+      
       if (existingRecord) {
         setMergePrompt({
           show: true,
-          existingAmount: existingRecord.totalAmount - existingRecord.paidAmount
+          existingAmount: existingRecord.totalAmount - existingRecord.paidAmount,
+          customerName: existingRecord.customerName
         });
         return;
       }
@@ -510,12 +516,19 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
         {mergePrompt && (
             <div className="absolute inset-0 z-[135] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-6 animate-in zoom-in-95 rounded-3xl">
-              <div className="text-center w-full">
-                <h3 className="text-white text-xl font-black uppercase mb-4">Merge Transaction?</h3>
-                <p className="text-slate-400 text-xs mb-6">Existing unpaid balance: ₱{mergePrompt.existingAmount.toLocaleString()}</p>
+              <div className="text-center w-full max-w-xs">
+                <h3 className="text-white text-xl font-black uppercase mb-2">Unpaid Balance Found</h3>
+                <p className="text-slate-300 text-sm font-bold mb-1">{mergePrompt.customerName}</p>
+                <p className="text-slate-400 text-xs mb-6">Existing debt: <span className="text-rose-400 font-bold">₱{mergePrompt.existingAmount.toLocaleString()}</span></p>
+                
                 <div className="space-y-3">
-                  <button onClick={() => onMergeConfirm(false)} className="w-full py-3 bg-indigo-500 text-white rounded-xl font-black uppercase text-xs">Merge</button>
-                  <button onClick={() => onMergeConfirm(true)} className="w-full py-3 bg-white/10 text-white rounded-xl font-black uppercase text-xs">Separate Invoice</button>
+                  <button onClick={() => onMergeConfirm(false)} className="w-full py-4 bg-indigo-500 text-white rounded-2xl font-black uppercase text-xs tracking-wide shadow-lg shadow-indigo-500/20 hover:bg-indigo-400 transition">
+                    Merge with Existing
+                  </button>
+                  <p className="text-[10px] text-slate-500">OR</p>
+                  <button onClick={() => onMergeConfirm(true)} className="w-full py-4 bg-white/10 text-white rounded-2xl font-black uppercase text-xs tracking-wide hover:bg-white/20 transition">
+                    Create New Invoice
+                  </button>
                 </div>
               </div>
             </div>

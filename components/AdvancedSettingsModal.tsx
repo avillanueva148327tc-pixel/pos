@@ -26,7 +26,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
       alert("You must have at least one category.");
       return;
     }
-    if (confirm(`Remove category "${cat}"? Items in this category will remain unchanged but you won't be able to select this category for new items.`)) {
+    if (window.confirm(`Remove category "${cat}"? Items in this category will remain unchanged but you won't be able to select this category for new items.`)) {
         setSettings(prev => ({
             ...prev,
             categories: prev.categories.filter(c => c !== cat)
