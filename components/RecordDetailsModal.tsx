@@ -1,0 +1,152 @@
+import React, { useMemo } from 'react';
+import { UtangRecord, UtangItem } from '../types';
+
+interface RecordDetailsModalProps {
+  record: UtangRecord;
+  onClose: () => void;
+  onAction: (type: 'receipt' | 'partial' | 'payFull' | 'reminder' | 'delete' | 'edit' | 'customize', record: UtangRecord) => void;
+  isAdmin?: boolean;
+}
+
+const RecordDetailsModal: React.FC<RecordDetailsModalProps> = ({ record, onClose, onAction, isAdmin = false }) => {
+  const balance = Math.max(0, parseFloat((record.totalAmount - record.paidAmount).toFixed(2)));
+
+  // Improved Grouping Logic for chronological sessions
+  const groupedItems = useMemo(() => {
+    const groups: Record<string, UtangItem[]> = {};
+    record.items.forEach(item => {
+      // Input formats: "Oct 27, 2024, 2:30 PM" or "2024-10-27"
+      // Extract the date part (before the time comma)
+      const datePart = item.date.includes(',') ? item.date.split(',').slice(0, 2).join(',') : (item.date || 'Historical');
+      if (!groups[datePart]) groups[datePart] = [];
+      groups[datePart].push(item);
+    });
+    // Sort groups by date descending
+    return Object.entries(groups).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime());
+  }, [record.items]);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[120] p-4">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-5xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden ring-1 ring-white/10 animate-in">
+        <div className="p-8 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+          <div className="flex items-center gap-4">
+            <div>
+              <h3 className="text-2xl font-black tracking-tight">{record.isPaid ? 'Payment Receipt' : 'Statement of Account'}</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Ref: {record.id.slice(0, 8).toUpperCase()}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button 
+                onClick={() => onAction('edit', record)}
+                className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:scale-110 transition active:scale-95"
+                title="Edit Transaction"
+              >
+                ✏️
+              </button>
+            )}
+            <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-xl">✕</button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
+          <div className="grid grid-cols-2 gap-4">
+             <div className="p-5 bg-slate-50 dark:bg-slate-800 rounded-3xl ring-1 ring-slate-100 dark:ring-white/5">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Customer</p>
+                <p className="font-extrabold truncate uppercase text-sm">{record.customerName}</p>
+             </div>
+             <div className="p-5 bg-slate-50 dark:bg-slate-800 rounded-3xl ring-1 ring-slate-100 dark:ring-white/5 text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Account Status</p>
+                <p className={`font-black text-xs uppercase ${record.isPaid ? 'text-emerald-500' : 'text-amber-500'}`}>
+                  {record.isPaid ? '✓ Fully Settled' : 'Pending Payment'}
+                </p>
+             </div>
+          </div>
+
+          <div className="space-y-6">
+             <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Detailed Transaction History</h5>
+             <div className="space-y-8">
+                {groupedItems.map(([date, items]) => (
+                  <div key={date} className="space-y-2">
+                    <div className="flex items-center gap-2 px-1 mb-3">
+                      <span className="text-[8px] font-black text-primary px-2 py-0.5 bg-primary/10 rounded-md uppercase tracking-widest">{date}</span>
+                      <div className="h-px flex-1 bg-slate-100 dark:bg-white/5"></div>
+                    </div>
+                    {items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-4 bg-white dark:bg-slate-800 rounded-2xl ring-1 ring-slate-100 dark:ring-white/5 shadow-sm">
+                        <div className="flex-1 min-w-0 pr-4">
+                          <p className="font-extrabold text-xs uppercase truncate">{item.name}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">₱{item.price.toFixed(2)} x {item.quantity} {item.unit || 'pc'}</p>
+                        </div>
+                        <p className="font-black text-sm text-slate-900 dark:text-white tabular-nums">₱{(item.price * item.quantity).toFixed(2)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+             </div>
+          </div>
+
+          <div className="p-8 bg-slate-900 dark:bg-slate-950 text-white rounded-4xl space-y-6 shadow-2xl relative overflow-hidden shrink-0 mt-4">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
+            
+            <div className="grid grid-cols-2 gap-y-6 relative z-10">
+              <div>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Accumulated Debt</p>
+                <p className="text-2xl font-black tracking-tighter">₱{record.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Payments Made</p>
+                <p className="text-2xl font-black text-emerald-400 tracking-tighter">₱{record.paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              </div>
+              
+              <div className="col-span-2 pt-4 border-t border-white/5">
+                <div className="flex justify-between items-end">
+                   <div>
+                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Remaining Balance</p>
+                     <p className={`text-4xl font-black tracking-tighter ${balance > 0 ? 'text-rose-400' : 'text-emerald-500'}`}>
+                       ₱{balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                     </p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Repayment</p>
+                     <p className="text-xs font-bold text-slate-400">
+                        {Math.floor((record.paidAmount / record.totalAmount) * 100)}% Complete
+                     </p>
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative z-10">
+               <div className="h-full bg-primary transition-all duration-700" style={{ width: `${(record.paidAmount / record.totalAmount) * 100}%` }}></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-8 border-t border-slate-100 dark:border-white/5 flex flex-wrap gap-3 shrink-0">
+          {!record.isPaid && (
+            <>
+              <button onClick={() => onAction('payFull', record)} className="flex-[2] py-4 bg-primary text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20 transition hover:scale-[1.02] active:scale-95">Settle Full Balance</button>
+              <button onClick={() => onAction('partial', record)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black uppercase text-[10px] tracking-widest transition hover:bg-slate-200 active:scale-95">Partial Pay</button>
+            </>
+          )}
+          
+          <div className="flex gap-2 flex-[1.5]">
+             <button onClick={() => onAction('receipt', record)} className="flex-1 px-4 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition flex items-center justify-center gap-2 active:scale-95">
+                🖨️ Print
+             </button>
+             {isAdmin && (
+                <button onClick={() => onAction('customize', record)} className="flex-1 px-4 py-4 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition active:scale-95 flex items-center justify-center gap-2">
+                    🎨 Design
+                </button>
+             )}
+          </div>
+          
+          {isAdmin && <button onClick={() => onAction('delete', record)} className="px-6 py-4 bg-rose-50 text-rose-500 rounded-2xl text-xl hover:bg-rose-500 hover:text-white transition active:scale-95">🗑️</button>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RecordDetailsModal;
