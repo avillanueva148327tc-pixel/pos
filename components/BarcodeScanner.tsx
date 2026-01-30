@@ -32,7 +32,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const isInitializing = useRef(false);
   const isStopping = useRef(false);
   const isMounted = useRef(true);
-  const isProcessing = useRef(false); // Throttle scanning
   
   const [hasError, setHasError] = useState<string | null>(null);
   const [isSystemDenied, setIsSystemDenied] = useState(false);
@@ -122,6 +121,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         }
         scannerRef.current.clear();
       } catch (e) {
+        // Ignore errors during cleanup to prevent unhandled promise rejections
         console.warn("Cleanup warning:", e);
       }
       scannerRef.current = null;
@@ -132,14 +132,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     if (isInitializing.current || isStopping.current) return;
     isInitializing.current = true;
     
-    // 1. Check for Secure Context (HTTPS or localhost)
-    if (window.isSecureContext === false) {
-       setHasError("Camera access requires a secure connection (HTTPS). You are connected via HTTP.");
-       setIsSystemDenied(true);
-       isInitializing.current = false;
-       return;
-    }
-
     if (isMounted.current) {
       setHasError(null);
       setIsSystemDenied(false);
@@ -147,22 +139,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
     try {
       await cleanupScanner();
-
-      // 2. Pre-check permissions using standard API to catch denial early
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-         throw new Error("Camera API is not supported in this browser.");
-      }
-
-      // Try to get a stream briefly to trigger permission prompt or catch denial
-      // This gives us a cleaner error than the library sometimes does
-      try {
-         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-         // Immediately stop the stream so the library can take over
-         stream.getTracks().forEach(track => track.stop());
-      } catch (permErr: any) {
-         // Re-throw to be caught by the outer catch block with correct name
-         throw permErr;
-      }
 
       // Ensure DOM element exists and is clear
       const element = document.getElementById(readerId);
@@ -188,20 +164,9 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         deviceId, 
         config, 
         (decodedText: string) => {
-          if (!isMounted.current || isProcessing.current) return;
-
-          // Lock scanning processing
-          isProcessing.current = true;
+          if (!isMounted.current) return;
 
           const result = onScan(decodedText);
-          
-          if (result === ScanResultStatus.IDLE) {
-             // If IDLE, caller handled it (e.g. showed a modal), but we should wait a bit before scanning again
-             // OR if caller unmounted us (setScannerMode(null)), we will be cleaned up.
-             setTimeout(() => { isProcessing.current = false; }, 1000);
-             return;
-          }
-
           setScanStatus(result);
 
           if (result === ScanResultStatus.SUCCESS) {
@@ -211,25 +176,23 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             setShowFlash(true);
             setTimeout(() => { if(isMounted.current) setShowFlash(false); }, 150);
           } else if (result === ScanResultStatus.NOT_FOUND) {
+            // Error pattern: Double tap
             if ('vibrate' in navigator) navigator.vibrate([30, 50, 30]);
             playSound('error');
             setStatusMessage("Unknown Item");
           } else if (result === ScanResultStatus.OUT_OF_STOCK) {
+            // Warning pattern: Long vibration
             if ('vibrate' in navigator) navigator.vibrate(300);
             playSound('warning');
             setStatusMessage("Stock Empty!");
           }
 
-          // Delay to show feedback and prevent duplicate scans
-          const delay = result === ScanResultStatus.SUCCESS ? 1200 : 800;
-
           setTimeout(() => {
             if (isMounted.current) {
               setScanStatus(ScanResultStatus.IDLE);
               setStatusMessage('');
-              isProcessing.current = false; // Unlock
             }
-          }, delay);
+          }, 800);
           
           if (!isContinuous && result === ScanResultStatus.SUCCESS) {
             stopScanner();
@@ -253,6 +216,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       const errStr = (typeof err === 'string') ? err : (err.message || err.toString());
       const lowerErr = errStr.toLowerCase();
       
+      // Expanded error detection for various permission denied formats
       if (
         (err.name === 'NotAllowedError') ||
         lowerErr.includes('notallowederror') || 
@@ -264,8 +228,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         setHasError("Camera access was denied. Please check your Device Privacy Settings and allow camera access.");
       } else if (lowerErr.includes('notfounderror') || lowerErr.includes('no device')) {
         setHasError("No camera device found.");
-      } else if (lowerErr.includes('is being used')) {
-        setHasError("Camera is currently in use by another app.");
       } else {
         setHasError("Scanner error: " + errStr);
       }

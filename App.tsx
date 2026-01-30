@@ -117,15 +117,12 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock'>('all'); // New Filter State
-  const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'stock' | 'price' | 'expiryDate'; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   
   // Pagination State for Performance
   const [visibleItemsCount, setVisibleItemsCount] = useState(20);
 
   // Modals
   const [showDebtModal, setShowDebtModal] = useState(false); // Main POS
-  const [autoStartScanner, setAutoStartScanner] = useState(false); // Terminal Mode Flag
-  
   const [posInitialCustomer, setPosInitialCustomer] = useState<Customer | null>(null);
   const [posInitialItem, setPosInitialItem] = useState<InventoryItem | null>(null);
 
@@ -480,22 +477,6 @@ export default function App() {
     const lowerSearch = searchTerm.toLowerCase();
     return i.name.toLowerCase().includes(lowerSearch) || 
            (i.barcode && i.barcode.includes(lowerSearch));
-  }).sort((a, b) => {
-    const { key, direction } = sortConfig;
-    const modifier = direction === 'asc' ? 1 : -1;
-
-    if (key === 'name') {
-        return a.name.localeCompare(b.name) * modifier;
-    } else if (key === 'stock') {
-        return (a.stock - b.stock) * modifier;
-    } else if (key === 'price') {
-        return (a.price - b.price) * modifier;
-    } else if (key === 'expiryDate') {
-        const dateA = a.expiryDate ? new Date(a.expiryDate).getTime() : (direction === 'asc' ? Infinity : -Infinity);
-        const dateB = b.expiryDate ? new Date(b.expiryDate).getTime() : (direction === 'asc' ? Infinity : -Infinity);
-        return (dateA - dateB) * modifier;
-    }
-    return 0;
   });
 
   const displayedInventory = filteredInventory.slice(0, visibleItemsCount);
@@ -619,39 +600,14 @@ export default function App() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="grid grid-cols-2 gap-3 h-40">
-                      <button 
-                        onClick={() => { 
-                          setPosInitialCustomer(null); 
-                          setPosInitialItem(null); 
-                          setAutoStartScanner(true); 
-                          setShowDebtModal(true); 
-                        }} 
-                        className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[2.5rem] p-4 shadow-xl hover:scale-[1.02] transition active:scale-95 flex flex-col justify-between group relative overflow-hidden"
-                      >
-                         <span className="text-3xl">📟</span>
-                         <div>
-                            <h3 className="text-xs font-black uppercase tracking-tight">Terminal Mode</h3>
-                            <p className="text-[8px] font-bold opacity-60 uppercase tracking-widest mt-1">Scan & Go</p>
-                         </div>
-                      </button>
-
-                      <button 
-                        onClick={() => { 
-                          setPosInitialCustomer(null); 
-                          setPosInitialItem(null); 
-                          setAutoStartScanner(false); 
-                          setShowDebtModal(true); 
-                        }} 
-                        className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white rounded-[2.5rem] p-4 shadow-sm border border-slate-200 dark:border-white/5 hover:border-[#6366f1] transition active:scale-95 flex flex-col justify-between group"
-                      >
-                         <span className="text-3xl grayscale group-hover:grayscale-0 transition">🛒</span>
-                         <div>
-                            <h3 className="text-xs font-black uppercase tracking-tight">Manual POS</h3>
-                            <p className="text-[8px] font-bold opacity-60 uppercase tracking-widest mt-1">Standard Entry</p>
-                         </div>
-                      </button>
-                   </div>
+                   <button onClick={() => { setPosInitialCustomer(null); setPosInitialItem(null); setShowDebtModal(true); }} className="h-40 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2.5rem] p-8 text-left text-white shadow-2xl shadow-indigo-500/30 hover:scale-[1.02] transition active:scale-95 flex flex-col justify-between group relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+                      <span className="text-4xl bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center backdrop-blur-sm">🛒</span>
+                      <div>
+                          <h3 className="text-2xl font-black uppercase tracking-tight">New Transaction</h3>
+                          <p className="text-xs font-bold opacity-80 uppercase tracking-widest mt-1">POS Terminal</p>
+                      </div>
+                   </button>
 
                    <div className="h-40 bg-white dark:bg-[#1e293b] rounded-[2.5rem] border border-slate-200 dark:border-white/5 p-6 flex items-center justify-center gap-4">
                       <button onClick={() => { setActiveTab('inventory'); setEditingItem(null); setShowAddInventory({ isOpen: true }); }} className="flex-1 h-full bg-emerald-50 dark:bg-emerald-500/10 rounded-3xl flex flex-col items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition group border border-emerald-100 dark:border-emerald-500/20">
@@ -702,23 +658,6 @@ export default function App() {
                       <>
                          <button onClick={() => setIsSearchExpanded(true)} className="h-12 w-12 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/10 flex items-center justify-center text-xl shadow-sm text-slate-500 shrink-0 active:scale-95 transition">🔍</button>
                          <div className="flex-1 flex gap-2 overflow-x-auto no-scrollbar">
-                             <select
-                                value={`${sortConfig.key}-${sortConfig.direction}`}
-                                onChange={(e) => {
-                                    const [key, direction] = e.target.value.split('-');
-                                    setSortConfig({ key: key as any, direction: direction as any });
-                                }}
-                                className="h-12 bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 rounded-2xl border border-slate-200 dark:border-white/10 px-3 text-[10px] font-black uppercase tracking-widest outline-none shrink-0"
-                             >
-                                <option value="name-asc">Name (A-Z)</option>
-                                <option value="name-desc">Name (Z-A)</option>
-                                <option value="stock-asc">Stock (Low)</option>
-                                <option value="stock-desc">Stock (High)</option>
-                                <option value="price-asc">Price (Low)</option>
-                                <option value="price-desc">Price (High)</option>
-                                <option value="expiryDate-asc">Expiry (Old)</option>
-                                <option value="expiryDate-desc">Expiry (New)</option>
-                             </select>
                              <button onClick={() => setShowBatchHistory(true)} className="flex-1 h-12 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-indigo-200 dark:border-indigo-800 whitespace-nowrap px-4">History</button>
                              <button onClick={() => setShowBatchModal(true)} className="flex-1 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-emerald-200 dark:border-emerald-800 whitespace-nowrap px-4">+ Stock In</button>
                              <button onClick={() => requireAdmin(() => setShowBulkUpload(true))} className="px-4 h-12 bg-white dark:bg-[#1e293b] text-slate-500 rounded-2xl font-black text-xl border border-slate-200 dark:border-white/10 shrink-0">☁️</button>
@@ -990,10 +929,9 @@ export default function App() {
           inventory={inventory} customers={customers} records={records} receiptTemplate={settings.receiptTemplate} branch={branch}
           adminPinHash={adminPinHash} requireAdminApproval={settings.requireAdminApproval} defaultAutoPrint={settings.autoPrintReceipt}
           initialCustomer={posInitialCustomer} initialItem={posInitialItem}
-          onAdd={handleAddDebt} onClose={() => { setShowDebtModal(false); setPosInitialCustomer(null); setPosInitialItem(null); setAutoStartScanner(false); }}
+          onAdd={handleAddDebt} onClose={() => { setShowDebtModal(false); setPosInitialCustomer(null); setPosInitialItem(null); }}
           onAddNewInventory={(code) => { setShowDebtModal(false); setEditingItem({ barcode: code } as any); setShowAddInventory({ isOpen: true, initialBarcode: code }); }}
           onRegisterCustomer={(name) => { setShowDebtModal(false); setPrefilledCustomerName(name); setShowAddCustomer(true); }}
-          autoStartScanner={autoStartScanner}
         />
       )}
 
