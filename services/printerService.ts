@@ -1,3 +1,4 @@
+
 import { UtangRecord, BranchConfig, ReceiptTemplate } from '../types';
 
 /**
@@ -28,25 +29,19 @@ export class PrinterService {
     try {
       if (!this.isBluetoothSupported) throw new Error("Bluetooth not supported");
 
-      // Request device with broadened filters for generic printers
+      // Use acceptAllDevices to ensure we can see ALL printers, regardless of their advertised name
+      // We list all common printer service UUIDs in optionalServices so we can access them if found
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          { services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, // Standard thermal service (128-bit)
-          { services: [0x18f0] }, // Standard thermal service (16-bit)
-          { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }, // Star Micronics
-          { services: ['49535343-fe7d-4ae5-8fa9-9fafd205e455'] }, // Generic/Epson/Star
-          { namePrefix: 'MPT' }, // Common prefix for mobile printers
-          { namePrefix: 'MTP' },
-          { namePrefix: 'RPP' },
-          { namePrefix: 'Printer' }
-        ],
+        acceptAllDevices: true,
         optionalServices: [
-          '000018f0-0000-1000-8000-00805f9b34fb', 
+          '000018f0-0000-1000-8000-00805f9b34fb', // Standard BLE
           0x18f0,
-          'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-          '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-          '0000ae00-0000-1000-8000-00805f9b34fb',
-          0xae00
+          'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Star Micronics
+          '49535343-fe7d-4ae5-8fa9-9fafd205e455', // Generic / Transparent UART
+          '0000ae00-0000-1000-8000-00805f9b34fb', // Some Chinese clones
+          0xae00,
+          '0000ff00-0000-1000-8000-00805f9b34fb', // Default proprietary
+          0xff00
         ]
       });
 
@@ -76,7 +71,7 @@ export class PrinterService {
           }
         }
       }
-      return false;
+      throw new Error("No writable characteristic found on device.");
     } catch (error: any) {
       const errStr = error ? String(error).toLowerCase() : '';
       // Gracefully handle common errors to avoid console noise
@@ -91,7 +86,7 @@ export class PrinterService {
         return false;
       }
       console.error("BT Connection Failed:", error);
-      return false;
+      throw error; // Re-throw to show error message in UI
     }
   }
 
@@ -101,36 +96,75 @@ export class PrinterService {
     try {
       if (!this.isUsbSupported) throw new Error("WebUSB not supported");
 
-      // Request device - Class 7 is Printer Class
+      // 1. Request device - Allow class 7 (Printer) and class 0 (Interface-specific)
       const device = await (navigator as any).usb.requestDevice({
-        filters: [{ classCode: 7 }] 
+        filters: [{ classCode: 7 }, { classCode: 0 }] 
       });
 
+      // 2. Open device session
       await device.open();
       
-      // Select configuration (usually 1)
+      // 3. Select configuration (if not already selected)
       if (device.configuration === null) {
         await device.selectConfiguration(1);
       }
 
-      // Find the interface that has the printer class and claim it
-      // Usually interface 0
-      let interfaceIndex = 0;
-      const intf = device.configuration?.interfaces.find((i: any) => 
-        i.alternates.some((a: any) => a.interfaceClass === 7)
-      );
-      
-      if (intf) interfaceIndex = intf.interfaceNumber;
-      await device.claimInterface(interfaceIndex);
+      const config = device.configuration;
+      if (!config) throw new Error("Device configuration unavailable.");
 
-      // Find 'bulk out' endpoint
-      const alternate = intf?.alternates[0];
-      const endpoint = alternate?.endpoints.find((e: any) => e.direction === 'out' && e.type === 'bulk');
+      // 4. Find the correct Interface and Bulk Out Endpoint
+      let targetInterface = null;
+      let targetEndpoint = null;
 
-      if (!endpoint) throw new Error("No Bulk Out endpoint found on printer");
+      // Strategy A: Look for explicit Printer Class (7) with a Bulk Out endpoint
+      for (const intf of config.interfaces) {
+        const alt = intf.alternates[0];
+        // Check for Printer Class (7)
+        if (alt.interfaceClass === 7) {
+           const ep = alt.endpoints.find((e: any) => e.direction === 'out' && e.type === 'bulk');
+           if (ep) {
+             targetInterface = intf;
+             targetEndpoint = ep;
+             break;
+           }
+        }
+      }
+
+      // Strategy B: Fallback - Look for ANY interface with a Bulk Out endpoint (for non-standard cheap printers)
+      if (!targetInterface) {
+         for (const intf of config.interfaces) {
+            const alt = intf.alternates[0];
+            // Skip HID (3) or Hub (9) classes just in case
+            if (alt.interfaceClass !== 3 && alt.interfaceClass !== 9) {
+                const ep = alt.endpoints.find((e: any) => e.direction === 'out' && e.type === 'bulk');
+                if (ep) {
+                   targetInterface = intf;
+                   targetEndpoint = ep;
+                   break;
+                }
+            }
+         }
+      }
+
+      if (!targetInterface || !targetEndpoint) {
+        throw new Error("No compatible bulk-write interface found on this device.");
+      }
+
+      // 5. Claim the interface
+      try {
+        await device.claimInterface(targetInterface.interfaceNumber);
+      } catch (e: any) {
+        // Handle "Unable to claim interface" error specifically
+        if (e.message && e.message.includes('Unable to claim interface')) {
+           // This usually happens on Windows if a driver (like 'usbprint') has locked the device.
+           // We throw a specific error text that the UI can recognize to show help.
+           throw new Error("DRIVER_LOCKED"); 
+        }
+        throw e;
+      }
 
       this.usbDevice = device;
-      this.usbEndpointNumber = endpoint.endpointNumber;
+      this.usbEndpointNumber = targetEndpoint.endpointNumber;
       
       // Disconnect BT if USB connects
       this.disconnectBluetooth();
@@ -147,8 +181,8 @@ export class PrinterService {
       ) {
         return false;
       }
-      console.error("USB Connection Failed:", error);
-      return false;
+      // Re-throw specific errors for the UI to handle
+      throw error;
     }
   }
 
@@ -193,13 +227,21 @@ export class PrinterService {
 
     // Bluetooth Send
     if (this.btCharacteristic) {
-      // Chunking for standard BLE MTU limits (safe size 120)
-      const chunkSize = 120; 
-      for (let i = 0; i < data.length; i += chunkSize) {
-        const chunk = data.slice(i, i + chunkSize);
-        await this.btCharacteristic.writeValue(chunk);
-        // Small delay to prevent buffer overflow on cheap printers
-        await new Promise(r => setTimeout(r, 10)); 
+      // FIX: Smaller chunks (50 bytes) for stability on cheap BLE chips
+      const CHUNK_SIZE = 50; 
+      
+      for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+        const chunk = data.slice(i, i + CHUNK_SIZE);
+        
+        // FIX: Prefer writeWithoutResponse if available for speed and to avoid GATT busy errors
+        if (this.btCharacteristic.properties.writeWithoutResponse) {
+           await this.btCharacteristic.writeValueWithoutResponse(chunk);
+        } else {
+           await this.btCharacteristic.writeValue(chunk);
+        }
+        
+        // FIX: Increase delay slightly to prevent buffer overflow (25ms)
+        await new Promise(r => setTimeout(r, 25)); 
       }
       return;
     }

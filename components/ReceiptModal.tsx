@@ -28,11 +28,21 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [activeTab, setActiveTab] = useState<'preview' | 'style'>('preview');
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  
   const receiptRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isThermal = ['58mm', '80mm'].includes(receiptTemplate.paperWidth);
   const isA4SixUp = receiptTemplate.paperWidth === 'A4-6';
+  const isLargeFormat = ['A4', 'Letter'].includes(receiptTemplate.paperWidth);
+
+  // Track window resize for responsive scaling
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (autoPrint && !isPreview) {
@@ -96,8 +106,16 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
       const reader = new FileReader();
       reader.onloadend = () => {
         onUpdateSettings('logoUrl', reader.result as string);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const removeLogo = () => {
+    if (onUpdateSettings) {
+      onUpdateSettings('logoUrl', '');
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -127,44 +145,68 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const accentColor = receiptTemplate.accentColor || '#6366f1';
   const fontSize = receiptTemplate.fontSize || 14;
-  const isCompact = receiptTemplate.layout === 'compact' || isA4SixUp; // Force compact for 6-up
+  const headerFontSize = receiptTemplate.headerFontSize || 20;
+  const itemFontSize = receiptTemplate.itemFontSize || 12;
+  const isCompact = receiptTemplate.layout === 'compact' || isA4SixUp;
   const isModern = receiptTemplate.layout === 'modern';
 
   const ReceiptContent = ({ isCopy = false, refProp = null }: { isCopy?: boolean, refProp?: React.RefObject<HTMLDivElement> | null }) => (
     <div 
       ref={refProp}
-      className={`bg-white text-slate-900 overflow-hidden border border-slate-200 print-receipt ${isPreview && !isCopy ? 'scale-90 md:scale-100 transition-transform origin-top shadow-2xl' : 'rounded-none shadow-none'} ${isA4SixUp ? 'print:border-dashed print:border-slate-300' : ''}`}
+      className={`bg-white text-slate-900 overflow-hidden border border-slate-200 print-receipt ${isPreview && !isCopy ? 'shadow-2xl' : 'rounded-none shadow-none'} ${isA4SixUp ? 'print:border-dashed print:border-slate-300' : ''}`}
       style={{ 
          ...paperWidthStyle,
          fontFamily: fontStyle,
-         fontSize: `${isA4SixUp ? Math.max(9, fontSize - 2) : fontSize}px`, // Slightly smaller font for 6-up
-         // If A4/Letter, simulate page
+         fontSize: `${isA4SixUp ? Math.max(9, fontSize - 2) : fontSize}px`,
          padding: !isThermal && !isA4SixUp ? '40px 50px' : '0'
       }}
     >
-      {isModern && isThermal && <div className="h-3 w-full no-print" style={{ backgroundColor: accentColor }}></div>}
-      {isModern && !isThermal && !isA4SixUp && <div className="absolute top-0 left-0 right-0 h-4 w-full" style={{ backgroundColor: accentColor }}></div>}
-
-      <div className={`${isCompact ? 'p-3' : (isThermal ? 'p-8 md:p-10' : 'p-0')} h-full flex flex-col`}>
+      {/* Modern Header Background */}
+      {isModern && !isA4SixUp && (
+        <div 
+          className="absolute top-0 left-0 right-0 h-24 no-print" 
+          style={{ backgroundColor: accentColor, opacity: 0.1, zIndex: 0 }} 
+        />
+      )}
+      
+      {/* Modern Top Accent Line */}
+      {isModern && isThermal && <div className="h-2 w-full no-print relative z-10" style={{ backgroundColor: accentColor }}></div>}
+      
+      <div className={`${isCompact ? 'p-3' : (isThermal ? 'p-8 md:p-10' : 'p-0')} h-full flex flex-col relative z-10`}>
         {/* Header Section */}
-        <div className={`mb-3 ${headerAlignClass}`}>
+        <div className={`mb-3 ${headerAlignClass} ${isModern ? 'pb-4' : ''}`}>
           {(receiptTemplate.logoUrl || branch.logoUrl) && (
-            <img src={receiptTemplate.logoUrl || branch.logoUrl} alt="Store Logo" className={`object-contain mb-1 ${headerAlignClass === 'text-center' ? 'mx-auto' : ''} rounded-xl ${isCompact ? 'w-8 h-8' : 'w-20 h-20'}`} />
+            <img 
+              src={receiptTemplate.logoUrl || branch.logoUrl} 
+              alt="Store Logo" 
+              className={`object-contain mb-2 ${headerAlignClass === 'text-center' ? 'mx-auto' : ''} rounded-xl ${isCompact ? 'h-8 w-auto max-w-[80px]' : 'h-24 w-auto max-w-[200px]'}`} 
+            />
           )}
-          <h2 className="font-black uppercase tracking-tighter leading-none truncate" style={{ color: isModern ? accentColor : 'inherit', fontSize: `${fontSize * (isCompact ? 1.2 : 1.5)}px` }}>{branch.name}</h2>
+          
+          <h2 
+            className="font-black uppercase tracking-tighter leading-none truncate" 
+            style={{ 
+              color: isModern ? accentColor : 'inherit', 
+              fontSize: `${isA4SixUp ? Math.max(12, headerFontSize - 4) : headerFontSize}px`
+            }}
+          >
+            {branch.name}
+          </h2>
+          
           {receiptTemplate.headerSubtitle && (
-            <p className="font-bold text-slate-400 uppercase tracking-widest mt-0.5 line-clamp-1" style={{ fontSize: `${fontSize * 0.7}px` }}>{receiptTemplate.headerSubtitle}</p>
+            <p className="font-bold text-slate-400 uppercase tracking-widest mt-1 line-clamp-1" style={{ fontSize: `${fontSize * 0.7}px` }}>{receiptTemplate.headerSubtitle}</p>
           )}
-          <div className="font-medium text-slate-500 uppercase mt-1 space-y-0.5" style={{ fontSize: `${fontSize * 0.65}px` }}>
+          
+          <div className="font-medium text-slate-500 uppercase mt-2 space-y-0.5" style={{ fontSize: `${fontSize * 0.65}px` }}>
             {receiptTemplate.showBranchAddress && <p className="line-clamp-1">{branch.address}</p>}
             {receiptTemplate.showBranchContact && <p>{branch.contact}</p>}
           </div>
         </div>
 
-        {!isCompact && <div className="border-t border-slate-100 my-2"></div>}
+        {!isCompact && !isModern && <div className="border-t border-slate-100 my-2"></div>}
 
         {/* Transaction Metadata */}
-        <div className={`bg-slate-50 rounded-xl space-y-0.5 border border-slate-100 ${isCompact ? 'p-2 mb-2' : 'p-5 mb-6'}`}>
+        <div className={`${isModern ? 'bg-slate-50 border-0' : 'bg-transparent border border-slate-100'} rounded-xl space-y-0.5 ${isCompact ? 'p-2 mb-2' : 'p-5 mb-6'}`}>
           <div className="flex justify-between items-center">
             <span className="font-black text-slate-400 uppercase tracking-widest" style={{ fontSize: `${fontSize * 0.6}px` }}>Customer</span>
             <span className="font-bold text-slate-900 uppercase truncate max-w-[60%]">{transaction.customerName || 'Walk-in'}</span>
@@ -191,29 +233,29 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
         {/* Items Table */}
         <div className="flex-1 overflow-hidden">
-          <table className="w-full text-left mb-2">
+          <table className="w-full text-left mb-2" style={{ fontSize: `${isA4SixUp ? Math.max(9, itemFontSize - 2) : itemFontSize}px` }}>
             <thead>
-              <tr className="border-b border-slate-200 uppercase tracking-widest text-slate-400" style={{ fontSize: `${fontSize * 0.6}px` }}>
-                <th className="pb-1 w-[40%]">Item</th>
-                <th className="pb-1 text-right w-[20%]">Price</th>
-                <th className="pb-1 text-center w-[15%]">Qty</th>
-                <th className="pb-1 text-right w-[25%]">Total</th>
+              <tr className={`uppercase tracking-widest text-slate-400 ${isModern ? 'border-b-2' : 'border-b'} border-slate-200`}>
+                <th className="pb-2 w-[40%]">Item</th>
+                <th className="pb-2 text-right w-[20%]">Price</th>
+                <th className="pb-2 text-center w-[15%]">Qty</th>
+                <th className="pb-2 text-right w-[25%]">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {transaction.items && transaction.items.slice(0, isA4SixUp ? 5 : 99).map((item, idx) => (
                 <tr key={idx}>
-                  <td className="py-1 pr-1 align-top">
-                    <p className="font-bold text-slate-800 uppercase leading-tight line-clamp-1">{item.name}</p>
-                    {receiptTemplate.showItemSize && item.unit && !isA4SixUp && <p className="text-[0.8em] text-slate-400">{item.unit}</p>}
+                  <td className="py-2 pr-1 align-top">
+                    <p className="font-bold text-slate-800 uppercase leading-tight line-clamp-2">{item.name}</p>
+                    {receiptTemplate.showItemSize && item.unit && !isA4SixUp && <p className="text-[0.8em] text-slate-400 mt-0.5">{item.unit}</p>}
                   </td>
-                  <td className="py-1 text-right font-medium text-slate-600 tabular-nums align-top">
+                  <td className="py-2 text-right font-medium text-slate-600 tabular-nums align-top">
                     ₱{item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
-                  <td className="py-1 text-center font-bold text-slate-700 tabular-nums align-top">
+                  <td className="py-2 text-center font-bold text-slate-700 tabular-nums align-top">
                     {item.quantity}
                   </td>
-                  <td className="py-1 text-right font-black text-slate-900 tabular-nums align-top">
+                  <td className="py-2 text-right font-black text-slate-900 tabular-nums align-top">
                     ₱{(item.price * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
@@ -228,10 +270,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </div>
 
         {/* Totals Section */}
-        <div className={`space-y-1 pt-2 border-t border-slate-200 ${isCompact ? 'mb-2' : 'mb-10'}`}>
+        <div className={`space-y-1 pt-4 border-t-2 border-slate-200 ${isCompact ? 'mb-2' : 'mb-10'}`}>
           <div className="flex justify-between items-center">
             <span className="font-black text-slate-400 uppercase tracking-widest" style={{ fontSize: `${fontSize * 0.7}px` }}>Total</span>
-            <span className="font-black tracking-tighter tabular-nums" style={{ color: isModern ? accentColor : 'black', fontSize: `${fontSize * 1.3}px` }}>₱{(transaction.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            <span className="font-black tracking-tighter tabular-nums" style={{ color: isModern ? accentColor : 'black', fontSize: `${fontSize * 1.5}px` }}>₱{(transaction.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
           {transaction.paidAmount > 0 && !isA4SixUp && (
              <div className="flex justify-between items-center text-slate-500" style={{ fontSize: `${fontSize * 0.8}px` }}>
@@ -254,7 +296,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
               {receiptTemplate.footerText}
             </p>
           )}
-          <div className="flex items-center justify-center gap-2 opacity-30">
+          <div className="flex items-center justify-center gap-2 opacity-30 pt-2">
              <span className="w-1 h-1 rounded-full bg-slate-900"></span>
              <p className="font-black text-slate-900 uppercase tracking-[0.3em]" style={{ fontSize: `${fontSize * 0.5}px` }}>
                {receiptTemplate.brandingText}
@@ -266,35 +308,59 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
     </div>
   );
 
-  // PREVIEW / EDIT MODE - STYLED TO MATCH "REGISTER SUKI" IMAGE
+  // PREVIEW / EDIT MODE
   if (isPreview) {
     return (
       <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[250] animate-in fade-in duration-300">
         <div className="w-full h-full max-w-7xl flex flex-col md:flex-row overflow-hidden md:rounded-[2.5rem] bg-[#0f172a] shadow-2xl relative border border-white/5">
           
-          {/* Header (Mobile) / Close Button */}
-          <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-50 md:hidden bg-[#0f172a]/90 backdrop-blur-md border-b border-white/5">
-            <h3 className="text-white font-black uppercase tracking-widest text-sm">Receipt Designer</h3>
-            <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center">✕</button>
+          {/* Header (Mobile) */}
+          <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-[70] md:hidden bg-[#0f172a]/90 backdrop-blur-md border-b border-white/5">
+            <h3 className="text-white font-black uppercase tracking-widest text-sm">Receipt Studio</h3>
+            <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">✕</button>
           </div>
+          
+          {/* Desktop Close Button */}
           <button onClick={onClose} className="absolute top-6 right-6 z-50 w-12 h-12 rounded-full bg-white/10 text-white hover:bg-rose-500 hover:text-white flex items-center justify-center transition hidden md:flex text-xl font-bold">✕</button>
 
           {/* Left Pane: Preview */}
-          <div className={`flex-1 bg-[#111827] flex items-center justify-center p-8 md:p-12 overflow-y-auto relative ${activeTab === 'style' ? 'hidden md:flex' : 'flex'}`}>
+          {/* On mobile, this div is hidden if activeTab is 'style' */}
+          <div 
+            className={`flex-1 bg-[#111827] flex items-center justify-center p-4 md:p-12 overflow-y-auto overflow-x-hidden relative transition-all duration-300 ${activeTab === 'style' ? 'hidden md:flex' : 'flex'}`}
+          >
             <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }}></div>
-            <div className="scale-90 md:scale-100 shadow-[0_0_100px_rgba(0,0,0,0.5)] transition-all">
-               <ReceiptContent refProp={receiptRef} />
+            
+            <div className="mt-20 md:mt-0 pb-32 md:pb-0 flex flex-col items-center justify-start md:justify-center min-h-0 w-full">
+               {/* 
+                  Responsive Scale Logic:
+                  - Mobile: Shrink significantly for large formats (A4/Letter) or slightly for Thermal.
+                  - Desktop (md): Show close to normal size or slight shrink.
+               */}
+               <div 
+                 className="transition-transform duration-300 origin-top md:origin-center"
+                 style={{ 
+                   transform: windowWidth < 768 
+                     ? (isLargeFormat ? 'scale(0.35)' : 'scale(0.85)') // Mobile Scaling
+                     : (isLargeFormat ? 'scale(0.55)' : 'scale(1)') // Desktop Scaling
+                 }}
+               >
+                  <ReceiptContent refProp={receiptRef} />
+               </div>
             </div>
           </div>
 
-          {/* Right Pane: Settings (Styled like Suki Modal) */}
-          <div className={`w-full md:w-[420px] bg-[#0f172a] border-l border-white/5 flex flex-col ${activeTab === 'preview' ? 'hidden md:flex' : 'flex'}`}>
-             <div className="p-8 border-b border-white/5 hidden md:block">
+          {/* Right Pane: Settings */}
+          {/* On mobile, this div is hidden if activeTab is 'preview' */}
+          <div 
+            className={`w-full md:w-[420px] bg-[#0f172a] border-l border-white/5 flex flex-col h-full ${activeTab === 'preview' ? 'hidden md:flex' : 'flex'}`}
+          >
+             <div className="p-6 md:p-8 border-b border-white/5 shrink-0 pt-20 md:pt-8 flex flex-col justify-end min-h-[120px] md:min-h-0">
                 <h2 className="text-2xl font-black text-white tracking-tight">Receipt Studio</h2>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">CUSTOMIZE TEMPLATE</p>
              </div>
 
-             <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 no-scrollbar pt-20 md:pt-8">
+             <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar pb-32 md:pb-8">
+                
                 {/* Branding Section */}
                 <section className="space-y-4">
                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Branding & Identity</h4>
@@ -302,9 +368,9 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <div className="flex gap-4 items-center bg-[#1e293b] p-4 rounded-2xl border border-slate-700">
                      <div 
                        onClick={() => fileInputRef.current?.click()}
-                       className="w-16 h-16 rounded-xl bg-slate-800 border-2 border-dashed border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition overflow-hidden shrink-0"
+                       className="w-24 h-20 rounded-xl bg-slate-800 border-2 border-dashed border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition overflow-hidden shrink-0"
                      >
-                        {receiptTemplate.logoUrl ? <img src={receiptTemplate.logoUrl} className="w-full h-full object-contain" /> : <span className="text-2xl">📷</span>}
+                        {receiptTemplate.logoUrl ? <img src={receiptTemplate.logoUrl} className="h-full w-auto object-contain" /> : <span className="text-2xl">📷</span>}
                      </div>
                      <div className="flex-1">
                         <p className="text-xs font-bold text-white uppercase tracking-wider">Header Logo</p>
@@ -312,10 +378,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                           <button onClick={() => fileInputRef.current?.click()} className="text-[9px] font-black bg-white text-slate-900 px-3 py-1.5 rounded-lg uppercase transition hover:bg-gray-200">Upload</button>
                           {receiptTemplate.logoUrl && (
                             <button 
-                              onClick={() => onUpdateSettings?.('logoUrl', '')}
+                              onClick={removeLogo}
                               className="text-[9px] font-black bg-rose-500/10 text-rose-500 border border-rose-500/30 px-3 py-1.5 rounded-lg uppercase hover:bg-rose-500 hover:text-white transition"
                             >
-                              Reset
+                              Remove
                             </button>
                           )}
                         </div>
@@ -324,12 +390,38 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   </div>
 
                   <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Accent Color</label>
+                     <div className="flex gap-3 bg-[#1e293b] p-3 rounded-xl border border-slate-700 items-center">
+                        <input 
+                          type="color" 
+                          value={receiptTemplate.accentColor || '#6366f1'} 
+                          onChange={e => onUpdateSettings?.('accentColor', e.target.value)}
+                          className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-none p-0"
+                        />
+                        <div className="flex-1">
+                           <p className="text-xs font-bold text-white uppercase">{receiptTemplate.accentColor || '#6366f1'}</p>
+                           <p className="text-[9px] text-slate-500">Used for highlights & modern layout</p>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div>
                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Footer Message</label>
                      <textarea 
                        value={receiptTemplate.footerText} 
                        onChange={e => onUpdateSettings?.('footerText', e.target.value)} 
-                       className="w-full bg-[#1e293b] border border-slate-700 rounded-xl p-4 text-xs font-bold text-white h-24 outline-none focus:ring-2 focus:ring-primary/50 transition resize-none placeholder:text-slate-600"
+                       className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white h-24 outline-none focus:ring-2 focus:ring-primary/50 transition resize-none placeholder:text-slate-600"
                        placeholder="e.g. Thank you for buying!"
+                     />
+                  </div>
+
+                  <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Branding Footer</label>
+                     <input 
+                       value={receiptTemplate.brandingText} 
+                       onChange={e => onUpdateSettings?.('brandingText', e.target.value)} 
+                       className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 transition placeholder:text-slate-600"
+                       placeholder="System Name / Small print"
                      />
                   </div>
                 </section>
@@ -339,15 +431,35 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Layout Config</h4>
                   
                   <div className="grid grid-cols-3 gap-2 p-1.5 bg-[#1e293b] rounded-xl border border-slate-700">
-                     {(['classic', 'modern', 'compact'] as ReceiptLayout[]).map(l => (
+                     {[
+                       { id: 'classic', label: 'Classic', icon: '📄' },
+                       { id: 'modern', label: 'Modern', icon: '✨' },
+                       { id: 'compact', label: 'Compact', icon: '🤏' }
+                     ].map(l => (
                        <button 
-                         key={l} 
-                         onClick={() => onUpdateSettings?.('layout', l)}
-                         className={`py-2.5 rounded-lg text-[9px] font-black uppercase transition-all ${receiptTemplate.layout === l ? 'bg-[#6366f1] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                         key={l.id} 
+                         onClick={() => onUpdateSettings?.('layout', l.id)}
+                         className={`flex flex-col items-center gap-1 py-3 rounded-lg text-[9px] font-black uppercase transition-all ${receiptTemplate.layout === l.id ? 'bg-[#6366f1] text-white shadow-lg' : 'text-slate-400 hover:bg-white/5'}`}
                        >
-                         {l}
+                         <span className="text-sm grayscale">{l.icon}</span>
+                         {l.label}
                        </button>
                      ))}
+                  </div>
+
+                  <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Header Alignment</label>
+                     <div className="grid grid-cols-3 gap-2 p-1.5 bg-[#1e293b] rounded-xl border border-slate-700">
+                        {['left', 'center', 'right'].map(align => (
+                           <button 
+                             key={align} 
+                             onClick={() => onUpdateSettings?.('headerAlignment', align)}
+                             className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${receiptTemplate.headerAlignment === align ? 'bg-[#6366f1] text-white shadow-lg' : 'text-slate-400 hover:bg-white/5'}`}
+                           >
+                             {align}
+                           </button>
+                        ))}
+                     </div>
                   </div>
 
                   <div>
@@ -356,7 +468,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                         <select 
                             value={receiptTemplate.fontFamily} 
                             onChange={e => onUpdateSettings?.('fontFamily', e.target.value)} 
-                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
                         >
                             <option value="Inter">Inter (Clean)</option>
                             <option value="JetBrains Mono">JetBrains Mono (Code)</option>
@@ -375,7 +487,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                             <select 
                             value={receiptTemplate.paperWidth} 
                             onChange={e => onUpdateSettings?.('paperWidth', e.target.value)} 
-                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
                             >
                             <optgroup label="Thermal">
                                 <option value="58mm">58mm</option>
@@ -391,11 +503,31 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                         </div>
                      </div>
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Font Size</label>
-                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[42px]">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Base Size</label>
+                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[46px]">
                            <button onClick={() => onUpdateSettings?.('fontSize', Math.max(10, fontSize - 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">-</button>
                            <span className="flex-1 text-center text-xs font-bold text-white">{fontSize}px</span>
                            <button onClick={() => onUpdateSettings?.('fontSize', Math.min(20, fontSize + 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">+</button>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* New Font Size Controls */}
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Header Size</label>
+                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[46px]">
+                           <button onClick={() => onUpdateSettings?.('headerFontSize', Math.max(12, headerFontSize - 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">-</button>
+                           <span className="flex-1 text-center text-xs font-bold text-white">{headerFontSize}px</span>
+                           <button onClick={() => onUpdateSettings?.('headerFontSize', Math.min(32, headerFontSize + 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">+</button>
+                        </div>
+                     </div>
+                     <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Item Size</label>
+                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[46px]">
+                           <button onClick={() => onUpdateSettings?.('itemFontSize', Math.max(8, itemFontSize - 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">-</button>
+                           <span className="flex-1 text-center text-xs font-bold text-white">{itemFontSize}px</span>
+                           <button onClick={() => onUpdateSettings?.('itemFontSize', Math.min(18, itemFontSize + 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">+</button>
                         </div>
                      </div>
                   </div>
@@ -422,19 +554,17 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                    ))}
                 </section>
                 
-                {/* Save Button */}
-                <button onClick={onClose} className="w-full py-4 bg-[#6366f1] text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-500/20 hover:bg-indigo-500 transition active:scale-95">
+                {/* Save Button (Inside Scroll) */}
+                <button onClick={onClose} className="w-full py-4 bg-[#6366f1] text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-500/20 hover:bg-indigo-500 transition active:scale-95 mb-4">
                   Done & Save
                 </button>
-
-                <div className="h-20 md:hidden"></div>
              </div>
+          </div>
 
-             {/* Mobile Tab Bar */}
-             <div className="md:hidden flex p-2 bg-[#020617] border-t border-white/10 fixed bottom-0 left-0 right-0 z-50">
-                <button onClick={() => setActiveTab('preview')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${activeTab === 'preview' ? 'bg-white text-slate-900' : 'text-slate-500'}`}>Preview</button>
-                <button onClick={() => setActiveTab('style')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${activeTab === 'style' ? 'bg-white text-slate-900' : 'text-slate-500'}`}>Styles</button>
-             </div>
+          {/* Mobile Tab Bar - Fixed at bottom outside the conditional panes so it persists */}
+          <div className="md:hidden flex p-2 bg-[#020617] border-t border-white/10 fixed bottom-0 left-0 right-0 z-[60]">
+            <button onClick={() => setActiveTab('preview')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'preview' ? 'bg-white text-slate-900' : 'text-slate-500 hover:text-slate-300'}`}>Preview</button>
+            <button onClick={() => setActiveTab('style')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'style' ? 'bg-white text-slate-900' : 'text-slate-500 hover:text-slate-300'}`}>Styles</button>
           </div>
         </div>
       </div>

@@ -1,8 +1,5 @@
 
+// AI modal has been removed
 import React from 'react';
-
-const AIAnalysisModal: React.FC<any> = () => {
-  return null;
-};
-
+const AIAnalysisModal = () => null;
 export default AIAnalysisModal;

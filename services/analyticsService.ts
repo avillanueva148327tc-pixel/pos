@@ -17,6 +17,10 @@ export const AnalyticsService = {
         // Robust Date Matching (Handles various locale formats by comparing day/month/year)
         const dayRecords = records.filter(r => {
             const rDate = new Date(r.date);
+            
+            // Safety check for invalid dates
+            if (isNaN(rDate.getTime())) return false;
+
             return rDate.getDate() === date.getDate() &&
                    rDate.getMonth() === date.getMonth() &&
                    rDate.getFullYear() === date.getFullYear();
@@ -26,7 +30,8 @@ export const AnalyticsService = {
         const dayDebt = dayRecords.filter(r => !r.isPaid).reduce((s, r) => s + (r.totalAmount - r.paidAmount), 0);
         
         // Return formatted date (e.g., "Oct 25")
-        const dateLabel = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        // Using 'en-US' to ensure short format "MMM DD" fits in chart axis
+        const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
         return { date: dateLabel, sales: daySales, debt: dayDebt };
     });

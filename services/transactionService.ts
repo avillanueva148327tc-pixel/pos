@@ -15,14 +15,14 @@ export const TransactionService = {
    * Centralizes validation, stock deduction, and ledger updates.
    */
   processTransaction: (
-    data: any, // Raw form data
+    data: any, 
     inventory: InventoryItem[],
     records: UtangRecord[],
+    customers: Customer[],
     settings: AppSettings
   ): TransactionResult => {
     
     // 1. Validation Phase
-    // Ensure items exist (Referential Integrity Check)
     const validItems = data.items.every((item: UtangItem) => 
         !item.productId || inventory.some(i => i.id === item.productId)
     );
@@ -33,12 +33,11 @@ export const TransactionService = {
 
     const newInventory = [...inventory];
     
-    // 2. Execution Phase: Stock Deduction (Bulk Operation)
+    // 2. Execution Phase: Stock Deduction
     data.items.forEach((item: UtangItem) => {
         if (item.productId) {
             const idx = newInventory.findIndex(i => i.id === item.productId);
             if (idx >= 0) {
-                // Ensure stock doesn't go below zero (Business Rule)
                 newInventory[idx] = {
                     ...newInventory[idx],
                     stock: Math.max(0, newInventory[idx].stock - item.quantity)
@@ -47,18 +46,16 @@ export const TransactionService = {
         }
     });
 
-    // 3. Execution Phase: Record Management (Merge vs Insert)
-    // Optimizes storage by merging unpaid debts for the same customer
+    // 3. Execution Phase: Record Management
     if (!data.isPaid && !data.forceNew && data.customerName !== 'Walk-in Customer') {
         const existingRecordIndex = records.findIndex(r => r.customerName === data.customerName && !r.isPaid);
         if (existingRecordIndex >= 0) {
             const existingRecord = records[existingRecordIndex];
             
             const updatedItems = [...existingRecord.items, ...data.items];
-            const updatedTotal = existingRecord.totalAmount + data.totalAmount;
+            const updatedTotal = existingRecord.totalAmount + data.totalAmount; 
             const updatedQuantity = existingRecord.quantity + data.quantity;
             
-            // Consolidate product descriptions
             const existingProducts = existingRecord.product.split(', ').filter(Boolean);
             const newProducts = data.product.split(', ').filter(Boolean);
             const mergedProducts = Array.from(new Set([...existingProducts, ...newProducts])).join(', ');
@@ -68,10 +65,7 @@ export const TransactionService = {
                 items: updatedItems,
                 totalAmount: updatedTotal,
                 quantity: updatedQuantity,
-                product: mergedProducts,
-                // Update timestamp to show recent activity, or keep original? 
-                // Usually keeping original start date is better for aging, but updating shows activity.
-                // Let's keep original date but maybe add a 'lastUpdated' field if we had one.
+                product: mergedProducts
             };
 
             const updatedRecords = [...records];
@@ -102,10 +96,6 @@ export const TransactionService = {
     };
   },
 
-  /**
-   * "Stored Procedure" for Voiding Transactions
-   * Restores inventory stock automatically.
-   */
   deleteTransaction: (
     recordId: string,
     inventory: InventoryItem[],
@@ -118,12 +108,10 @@ export const TransactionService = {
 
     const newInventory = [...inventory];
 
-    // Restore Stock (Reverse Operation)
     recordToDelete.items.forEach(item => {
         if (item.productId) {
             const idx = newInventory.findIndex(i => i.id === item.productId);
             if (idx >= 0) {
-                // Add quantity back to stock
                 newInventory[idx] = {
                     ...newInventory[idx],
                     stock: newInventory[idx].stock + item.quantity

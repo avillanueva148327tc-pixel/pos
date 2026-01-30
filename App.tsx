@@ -1,11 +1,11 @@
 
-// ... (imports remain the same)
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   InventoryItem, Customer, UtangRecord, BatchRecord, AppSettings, BranchConfig, UserRole, Stats as StatsType, UtangItem 
 } from './types';
 import LoginScreen from './components/LoginScreen';
 // Stats import is now used inside FinancialPulseModal, but we calculate stats here.
+import Stats from './components/Stats';
 import AddDebtModal from './components/AddDebtModal';
 import AddInventoryModal from './components/AddInventoryModal';
 import AddBatchModal from './components/AddBatchModal';
@@ -15,6 +15,7 @@ import StockAdjustModal from './components/StockAdjustModal';
 import RecordDetailsModal from './components/RecordDetailsModal';
 import AddCustomerModal from './components/AddCustomerModal';
 import CustomerQRModal from './components/CustomerQRModal';
+import CustomerHistoryModal from './components/CustomerHistoryModal';
 import ReceiptModal from './components/ReceiptModal';
 import PartialPayModal from './components/PartialPayModal';
 import ReminderModal from './components/ReminderModal';
@@ -46,8 +47,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   expiryThresholdDays: 30,
   lowStockThreshold: 5,
   language: 'en',
+  theme: 'dark', 
+  dailySalesTarget: 5000, 
   autoPrintReceipt: false,
   requireAdminApproval: true,
+  showFinancialPulseOnDashboard: false,
   auth: { adminPin: "1234", cashierPin: "0000" },
   receiptTemplate: {
     showBranchAddress: true,
@@ -61,8 +65,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     paperWidth: "58mm",
     fontFamily: "Inter",
     fontSize: 12,
+    headerFontSize: 18,
+    itemFontSize: 12,
     layout: "classic",
-    accentColor: "#000000"
+    accentColor: "#6366f1"
   },
   uiCustomization: {
     fontFamily: 'Inter',
@@ -110,6 +116,7 @@ export default function App() {
   const [showExpiryAlert, setShowExpiryAlert] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock'>('all'); // New Filter State
   
   // Pagination State for Performance
   const [visibleItemsCount, setVisibleItemsCount] = useState(20);
@@ -129,6 +136,7 @@ export default function App() {
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [prefilledCustomerName, setPrefilledCustomerName] = useState('');
   const [showCustomerQR, setShowCustomerQR] = useState<Customer | null>(null);
+  const [showCustomerHistory, setShowCustomerHistory] = useState<Customer | { name: string, isWalkIn: boolean } | null>(null);
   const [showReceipt, setShowReceipt] = useState<{record: UtangRecord, autoPrint: boolean, editMode?: boolean} | null>(null);
   const [showPartialPay, setShowPartialPay] = useState<UtangRecord | null>(null);
   const [showReminder, setShowReminder] = useState<UtangRecord | null>(null);
@@ -136,7 +144,17 @@ export default function App() {
   const [showBackupRestore, setShowBackupRestore] = useState(false);
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [showSync, setShowSync] = useState(false);
-  const [showConfirm, setShowConfirm] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
+  
+  // Updated showConfirm to support custom labels
+  const [showConfirm, setShowConfirm] = useState<{ 
+    title: string, 
+    message: string, 
+    onConfirm: () => void,
+    confirmLabel?: string, 
+    cancelLabel?: string,
+    isDanger?: boolean 
+  } | null>(null);
+
   const [showAdminAuth, setShowAdminAuth] = useState<{ onVerify: () => void } | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [showFinancialPulse, setShowFinancialPulse] = useState(false);
@@ -179,10 +197,20 @@ export default function App() {
     SecurityService.hashPin(settings.auth.adminPin).then(setAdminPinHash);
   }, [settings.auth.adminPin]);
 
+  // Theme Effect
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settings.theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [settings.theme]);
+
   // Reset pagination when search changes
   useEffect(() => {
     setVisibleItemsCount(20);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, inventoryFilter]);
 
   // --- COMPUTED ---
   const t = translations[settings.language] || translations.en;
@@ -195,7 +223,7 @@ export default function App() {
     return inventory.filter(i => {
        if (!i.expiryDate) return false;
        const exp = new Date(i.expiryDate);
-       return exp <= threshold;
+       return exp <= threshold && exp >= new Date(new Date().setDate(today.getDate() - 1)); // Don't show super old expired stuff, just approaching or recently expired
     });
   }, [inventory, settings.expiryThresholdDays]);
 
@@ -237,6 +265,12 @@ export default function App() {
     };
   }, [records, inventory, batches]);
 
+  // Goal Progress
+  const goalProgress = useMemo(() => {
+    if (!settings.dailySalesTarget) return 0;
+    return Math.min(100, (stats.dailySales / settings.dailySalesTarget) * 100);
+  }, [stats.dailySales, settings.dailySalesTarget]);
+
   // --- HANDLERS ---
   const handleLogin = async (pin: string) => {
     const inputHash = await SecurityService.hashPin(pin);
@@ -273,17 +307,33 @@ export default function App() {
         recordData,
         inventory,
         records,
+        customers,
         settings
      );
 
      if (result.success) {
         setInventory(result.updatedInventory);
         setRecords(result.updatedRecords);
-
-        // Handle Side Effects (Printing)
+        
+        // Handle Post-Transaction Printing
         const { shouldPrint } = recordData;
         if ((shouldPrint || settings.autoPrintReceipt) && result.newRecord) {
+            // Case 1: Explicitly requested print via button OR Auto-Print setting
             setShowReceipt({ record: result.newRecord, autoPrint: true });
+        } else if (result.newRecord) {
+            // Case 2: Silent success (e.g., Charge Debt or Pay Cash w/o print)
+            // User requested to allow printing after success even if not auto-selected
+            setShowConfirm({
+               title: "Transaction Saved",
+               message: "Would you like to print a receipt for this transaction?",
+               confirmLabel: "Print Receipt",
+               cancelLabel: "Done",
+               isDanger: false,
+               onConfirm: () => {
+                  setShowReceipt({ record: result.newRecord!, autoPrint: false });
+                  setShowConfirm(null);
+               }
+            });
         }
      } else {
         alert(result.error || "Transaction Failed");
@@ -291,19 +341,50 @@ export default function App() {
   };
 
   const handleDeleteInventory = (id: string) => {
-      const executeDelete = () => {
-         setInventory(inventory.filter(i => i.id !== id));
-         setEditingItem(null);
-         setShowAddInventory({ isOpen: false });
-         setShowAdminAuth(null); 
-      };
+      // 1. First trigger Confirmation Dialog
+      setShowConfirm({
+        title: "Delete Item",
+        message: "Are you sure you want to permanently delete this inventory item?",
+        onConfirm: () => {
+             // 2. On Confirm, execute logic with Admin Check
+             const executeDelete = () => {
+                setInventory(inventory.filter(i => i.id !== id));
+                setEditingItem(null);
+                setShowAddInventory({ isOpen: false });
+                setShowAdminAuth(null);
+                setShowConfirm(null); 
+             };
 
-      if (currentUserRole !== 'admin') {
-         setShowAdminAuth({ onVerify: executeDelete });
-         return;
-      }
-      
-      executeDelete();
+             if (currentUserRole !== 'admin') {
+                setShowAdminAuth({ onVerify: executeDelete });
+             } else {
+                executeDelete();
+             }
+        }
+      });
+  };
+
+  const handleDeleteCustomer = (id: string) => {
+      // 1. First trigger Confirmation Dialog
+      setShowConfirm({
+        title: "Delete Customer",
+        message: "Are you sure you want to delete this customer? This action cannot be undone.",
+        onConfirm: () => {
+           // 2. On Confirm, execute logic
+           const executeDelete = () => {
+               setCustomers(customers.filter(c => c.id !== id));
+               setShowCustomerHistory(null);
+               setShowConfirm(null);
+               setShowAdminAuth(null);
+           };
+           
+           if (currentUserRole !== 'admin') {
+               setShowAdminAuth({ onVerify: executeDelete });
+           } else {
+               executeDelete();
+           }
+        }
+      });
   };
 
   const handleAddBatch = (batch: Omit<BatchRecord, 'id'>) => {
@@ -375,8 +456,15 @@ export default function App() {
   }
   
   const filteredInventory = inventory.filter(i => {
+    // 1. Category Filter
     if (selectedCategory !== 'All' && i.category !== selectedCategory) return false;
     
+    // 2. Low Stock Filter
+    if (inventoryFilter === 'low-stock') {
+        if (i.stock > i.reorderLevel) return false;
+    }
+
+    // 3. Search Term
     if (!searchTerm) return true;
     
     const lowerSearch = searchTerm.toLowerCase();
@@ -403,13 +491,13 @@ export default function App() {
         {/* Navbar */}
         <nav className="sticky top-0 z-40 bg-white/80 dark:bg-[#0f172a]/90 backdrop-blur-md border-b border-slate-200 dark:border-white/5 px-4 md:px-6 h-16 flex items-center justify-between shrink-0">
            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-xl shadow-lg shadow-primary/30">🏪</div>
-              <h1 className="text-lg font-black tracking-tight hidden md:block uppercase">{branch.name}</h1>
+              <div className="w-10 h-10 bg-[#6366f1] rounded-xl flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30 text-white">🏪</div>
+              <h1 className="text-lg font-black tracking-tight hidden md:block uppercase text-slate-900 dark:text-white">{branch.name}</h1>
            </div>
            
            <div className="flex items-center gap-2">
-              <button onClick={() => setShowScanner(true)} className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-primary transition shadow-sm text-xl" title="Scan ID or Item">📷</button>
-              <span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-white/10 px-3 py-1.5 rounded-lg text-slate-500">{currentUserRole}</span>
+              <button onClick={() => setShowScanner(true)} className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-[#6366f1] transition shadow-sm text-xl" title="Scan ID or Item">📷</button>
+              <span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-white/10 px-3 py-1.5 rounded-lg text-slate-500 dark:text-slate-300">{currentUserRole}</span>
               <button onClick={() => setShowUserGuide(true)} className="w-10 h-10 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 flex items-center justify-center">❓</button>
               <button onClick={handleLogout} className="w-10 h-10 rounded-xl hover:bg-rose-500/10 hover:text-rose-500 flex items-center justify-center transition">🚪</button>
            </div>
@@ -433,14 +521,14 @@ export default function App() {
                 <button 
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-5 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest whitespace-nowrap transition-all ${activeTab === tab ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'bg-white dark:bg-[#1e293b] text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 border border-slate-200 dark:border-white/5'}`}
+                  className={`px-5 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest whitespace-nowrap transition-all ${activeTab === tab ? 'bg-[#6366f1] text-white shadow-lg shadow-indigo-500/20 scale-105' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 border border-slate-200 dark:border-white/5'}`}
                 >
                   {t[tab as keyof typeof t] || tab}
                 </button>
              ))}
           </div>
 
-          {/* --- DASHBOARD --- */}
+          {/* ... (DASHBOARD, INVENTORY, DEBT, CUSTOMERS, INSIGHTS tabs are mostly unchanged) ... */}
           {activeTab === 'dashboard' && (
              <div className="animate-in fade-in duration-500 space-y-6">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-2 px-1">
@@ -449,7 +537,7 @@ export default function App() {
                       <p className="text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-widest">Store Overview</p>
                    </div>
                    <div className="bg-white dark:bg-[#1e293b] px-5 py-3 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm flex flex-col items-end">
-                      <span className="text-xl font-black text-primary font-mono leading-none">
+                      <span className="text-xl font-black text-[#6366f1] font-mono leading-none">
                          {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -457,6 +545,52 @@ export default function App() {
                       </span>
                    </div>
                 </div>
+
+                {settings.showFinancialPulseOnDashboard && (
+                   <div className="animate-in slide-in-from-top-4">
+                      <Stats stats={stats} userRole={currentUserRole} />
+                   </div>
+                )}
+
+                {/* Sales Goal Widget */}
+                {settings.dailySalesTarget > 0 && (
+                  <div className="bg-white dark:bg-[#1e293b] p-6 rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-sm relative overflow-hidden group">
+                     {/* ... (Goal widget content) ... */}
+                     <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-[#6366f1]/5 opacity-0 group-hover:opacity-100 transition duration-700"></div>
+                     <div className="flex justify-between items-end mb-3 relative z-10">
+                        <div>
+                           <div className="flex items-center gap-2 mb-1">
+                              <span className="text-2xl">🎯</span>
+                              <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider">Daily Goal</h3>
+                           </div>
+                           <p className="text-[10px] font-bold text-slate-400 uppercase">Target: ₱{settings.dailySalesTarget.toLocaleString()}</p>
+                        </div>
+                        <div className="text-right">
+                           <span className={`text-2xl font-black ${goalProgress >= 100 ? 'text-emerald-500' : 'text-[#6366f1]'}`}>
+                              {goalProgress.toFixed(0)}%
+                           </span>
+                           <p className="text-[9px] font-bold text-slate-400 uppercase">₱{stats.dailySales.toLocaleString()} Earned</p>
+                        </div>
+                     </div>
+                     <div className="h-4 bg-slate-100 dark:bg-black/20 rounded-full overflow-hidden relative z-10 border border-slate-100 dark:border-white/5">
+                        <div 
+                           className={`h-full rounded-full transition-all duration-1000 ease-out ${goalProgress >= 100 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-gradient-to-r from-indigo-400 to-purple-600'}`}
+                           style={{ width: `${goalProgress}%` }}
+                        >
+                           {goalProgress >= 100 && (
+                              <div className="w-full h-full flex items-center justify-center">
+                                 <div className="w-full h-full bg-white/20 animate-pulse"></div>
+                              </div>
+                           )}
+                        </div>
+                     </div>
+                     {goalProgress >= 100 && (
+                        <div className="absolute top-2 right-2 text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg animate-bounce">
+                           GOAL REACHED! 🎉
+                        </div>
+                     )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <button onClick={() => { setPosInitialCustomer(null); setPosInitialItem(null); setShowDebtModal(true); }} className="h-40 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2.5rem] p-8 text-left text-white shadow-2xl shadow-indigo-500/30 hover:scale-[1.02] transition active:scale-95 flex flex-col justify-between group relative overflow-hidden">
@@ -482,14 +616,21 @@ export default function App() {
              </div>
           )}
 
-          {/* --- INVENTORY --- */}
           {activeTab === 'inventory' && (
              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-                
+                {/* ... (Inventory UI logic same as before) ... */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-                    <button onClick={() => setSelectedCategory('All')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === 'All' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>All Items</button>
+                    <button onClick={() => { setSelectedCategory('All'); setInventoryFilter('all'); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === 'All' && inventoryFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>All Items</button>
+                    
+                    <button 
+                      onClick={() => setInventoryFilter(inventoryFilter === 'low-stock' ? 'all' : 'low-stock')} 
+                      className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${inventoryFilter === 'low-stock' ? 'bg-rose-500 text-white border-transparent shadow-lg shadow-rose-500/30' : 'bg-white dark:bg-[#1e293b] text-rose-500 border-rose-200 dark:border-rose-900/30 hover:bg-rose-50'}`}
+                    >
+                      ⚠️ Low Stock Only
+                    </button>
+
                     {settings.categories.map(cat => (
-                      <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === cat ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>{cat}</button>
+                      <button key={cat} onClick={() => { setSelectedCategory(cat); setInventoryFilter('all'); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === cat && inventoryFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>{cat}</button>
                     ))}
                 </div>
 
@@ -498,7 +639,7 @@ export default function App() {
                       <div className="flex-1 relative animate-in fade-in slide-in-from-left-2 duration-200">
                          <input 
                            autoFocus
-                           className="w-full h-12 pl-10 pr-10 bg-white dark:bg-slate-800 rounded-2xl border border-primary/50 text-sm font-bold outline-none dark:text-white shadow-lg ring-4 ring-primary/10"
+                           className="w-full h-12 pl-10 pr-10 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#6366f1]/50 text-sm font-bold outline-none dark:text-white shadow-lg ring-4 ring-[#6366f1]/10"
                            placeholder="Search item name or code..."
                            value={searchTerm}
                            onChange={e => setSearchTerm(e.target.value)}
@@ -508,18 +649,18 @@ export default function App() {
                       </div>
                    ) : (
                       <>
-                         <button onClick={() => setIsSearchExpanded(true)} className="h-12 w-12 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/10 flex items-center justify-center text-xl shadow-sm text-slate-500 shrink-0 active:scale-95 transition">🔍</button>
+                         <button onClick={() => setIsSearchExpanded(true)} className="h-12 w-12 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/10 flex items-center justify-center text-xl shadow-sm text-slate-500 shrink-0 active:scale-95 transition">🔍</button>
                          <div className="flex-1 flex gap-2 overflow-x-auto no-scrollbar">
                              <button onClick={() => setShowBatchHistory(true)} className="flex-1 h-12 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-indigo-200 dark:border-indigo-800 whitespace-nowrap px-4">History</button>
                              <button onClick={() => setShowBatchModal(true)} className="flex-1 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-emerald-200 dark:border-emerald-800 whitespace-nowrap px-4">+ Stock In</button>
-                             <button onClick={() => requireAdmin(() => setShowBulkUpload(true))} className="px-4 h-12 bg-white dark:bg-slate-800 text-slate-500 rounded-2xl font-black text-xl border border-slate-200 dark:border-white/10 shrink-0">☁️</button>
+                             <button onClick={() => requireAdmin(() => setShowBulkUpload(true))} className="px-4 h-12 bg-white dark:bg-[#1e293b] text-slate-500 rounded-2xl font-black text-xl border border-slate-200 dark:border-white/10 shrink-0">☁️</button>
                          </div>
                       </>
                    )}
                 </div>
 
                 <div className={`grid gap-4 ${deviceMode === 'mobile' ? 'grid-cols-2' : (deviceMode === 'tablet' ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5')}`}>
-                  <button onClick={() => { setEditingItem(null); setShowAddInventory({ isOpen: true }); }} className="min-h-[200px] bg-slate-100 dark:bg-white/5 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-3xl flex flex-col items-center justify-center gap-3 hover:border-primary/50 hover:bg-white dark:hover:bg-slate-800 transition group">
+                  <button onClick={() => { setEditingItem(null); setShowAddInventory({ isOpen: true }); }} className="min-h-[200px] bg-slate-100 dark:bg-[#1e293b]/50 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-3xl flex flex-col items-center justify-center gap-3 hover:border-[#6366f1]/50 hover:bg-white dark:hover:bg-[#1e293b] transition group">
                      <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-3xl group-hover:scale-110 transition text-slate-400">+</div>
                      <p className="text-xs font-black uppercase text-slate-500">New Item</p>
                   </button>
@@ -534,44 +675,51 @@ export default function App() {
                               {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover" /> : '📦'}
                            </div>
                            <div>
-                              <p className="font-black text-sm uppercase leading-tight line-clamp-2">{item.name}</p>
+                              <p className="font-black text-sm uppercase leading-tight line-clamp-2 dark:text-white">{item.name}</p>
                               <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{item.category}</p>
                            </div>
                         </div>
                         <div className="mt-auto space-y-3">
                            <div className="flex justify-between items-end">
-                              <p className="text-lg font-black text-primary">₱{item.price.toFixed(2)}</p>
+                              <p className="text-lg font-black text-[#6366f1]">₱{item.price.toFixed(2)}</p>
                               <p className={`text-[10px] font-bold uppercase ${isLowStock ? 'text-rose-500' : 'text-slate-500'}`}>{item.stock} {item.unit}</p>
                            </div>
-                           <button onClick={() => setShowStockAdjust(item)} className="w-full py-2 bg-slate-100 dark:bg-[#0f172a] rounded-xl text-[10px] font-black uppercase text-slate-500 hover:bg-primary hover:text-white transition">Adjust Stock</button>
+                           <button onClick={() => setShowStockAdjust(item)} className="w-full py-2 bg-slate-100 dark:bg-[#0f172a] rounded-xl text-[10px] font-black uppercase text-slate-500 hover:bg-[#6366f1] hover:text-white transition">Adjust Stock</button>
                         </div>
                      </div>
                      );
                   })}
                 </div>
+                
+                {inventoryFilter === 'low-stock' && displayedInventory.length === 0 && (
+                   <div className="text-center py-20 opacity-50">
+                      <span className="text-4xl block mb-2">🎉</span>
+                      <p className="font-bold">No low stock items!</p>
+                   </div>
+                )}
+
                 {visibleItemsCount < filteredInventory.length && (
                   <div className="flex justify-center pt-6 pb-12">
-                     <button onClick={() => setVisibleItemsCount(prev => prev + 20)} className="px-8 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-black uppercase text-slate-500 hover:text-primary transition shadow-sm">Load More Items ({filteredInventory.length - visibleItemsCount} remaining)</button>
+                     <button onClick={() => setVisibleItemsCount(prev => prev + 20)} className="px-8 py-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-black uppercase text-slate-500 hover:text-[#6366f1] transition shadow-sm">Load More Items ({filteredInventory.length - visibleItemsCount} remaining)</button>
                   </div>
                 )}
              </div>
           )}
 
-          {/* ... (DEBT, CUSTOMERS, INSIGHTS tabs remain same) ... */}
           {activeTab === 'debt' && (
              <div className={`grid gap-4 ${deviceMode === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
                 {records.map(record => (
                    <div key={record.id} onClick={() => setShowRecordDetails(record)} className="bg-white dark:bg-[#1e293b] p-5 rounded-3xl border border-slate-200 dark:border-white/5 hover:shadow-lg transition cursor-pointer">
                       <div className="flex justify-between items-start mb-4">
                          <div>
-                            <p className="font-black text-sm uppercase">{record.customerName}</p>
+                            <p className="font-black text-sm uppercase dark:text-white">{record.customerName}</p>
                             <p className="text-[10px] text-slate-400">{record.date}</p>
                          </div>
                          <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${record.isPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{record.isPaid ? 'PAID' : 'UNPAID'}</span>
                       </div>
                       <div className="flex justify-between items-end">
                          <p className="text-[10px] font-bold text-slate-500 uppercase">{record.quantity} Items</p>
-                         <p className="text-xl font-black">₱{record.totalAmount.toFixed(2)}</p>
+                         <p className="text-xl font-black dark:text-white">₱{record.totalAmount.toFixed(2)}</p>
                       </div>
                    </div>
                 ))}
@@ -581,16 +729,40 @@ export default function App() {
 
           {activeTab === 'customers' && (
              <div className="space-y-4">
-                <button onClick={() => { setPrefilledCustomerName(''); setShowAddCustomer(true); }} className="w-full py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-widest shadow-lg">Register New Suki</button>
+                <button onClick={() => { setPrefilledCustomerName(''); setShowAddCustomer(true); }} className="w-full py-4 bg-[#6366f1] text-white rounded-2xl font-black uppercase tracking-widest shadow-lg">Register New Suki</button>
                 <div className={`grid gap-4 ${deviceMode === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+                   
+                   <div 
+                      onClick={() => setShowCustomerHistory({ name: 'Walk-in Customer', isWalkIn: true })}
+                      className="bg-indigo-500/10 dark:bg-indigo-900/10 p-5 rounded-3xl border border-indigo-500/20 hover:border-indigo-500/50 transition cursor-pointer group"
+                   >
+                      <div className="flex justify-between items-start mb-4">
+                        <p className="font-black text-lg uppercase text-indigo-500 dark:text-indigo-400">Walk-in Customers</p>
+                        <span className="text-xl group-hover:scale-110 transition">🚶</span>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <p className="text-xs text-slate-500">General Sales History</p>
+                        <span className="text-[10px] font-black bg-indigo-500 text-white px-2 py-1 rounded-lg">VIEW HISTORY</span>
+                      </div>
+                   </div>
+
                    {customers.map(c => (
                       <div key={c.id} className="bg-white dark:bg-[#1e293b] p-5 rounded-3xl border border-slate-200 dark:border-white/5 relative group">
-                         <button onClick={() => setShowCustomerQR(c)} className="absolute top-4 right-4 text-xl opacity-50 hover:opacity-100 transition">🪪</button>
-                         <p className="font-black text-lg uppercase">{c.name}</p>
-                         <p className="text-xs text-slate-500 mb-4">{c.address || 'No Address'}</p>
-                         <div className="p-3 bg-slate-50 dark:bg-[#0f172a] rounded-xl flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Credit Limit</span>
-                            <span className="font-black">₱{c.creditLimit?.toLocaleString()}</span>
+                         <button onClick={() => setShowCustomerQR(c)} className="absolute top-4 right-4 text-xl opacity-50 hover:opacity-100 transition z-10" title="View ID">🪪</button>
+                         <div onClick={() => setShowCustomerHistory(c)} className="cursor-pointer">
+                            <p className="font-black text-lg uppercase dark:text-white mr-8">{c.name}</p>
+                            <div className="flex justify-between items-end">
+                                <p className="text-xs text-slate-500 mb-4">{c.address || 'No Address'}</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="p-3 bg-slate-50 dark:bg-[#0f172a] rounded-xl flex-1 flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Limit</span>
+                                    <span className="font-black dark:text-white">₱{c.creditLimit?.toLocaleString()}</span>
+                                </div>
+                                <button className="p-3 bg-slate-100 dark:bg-white/5 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 dark:hover:bg-white/10 transition">
+                                   History
+                                </button>
+                            </div>
                          </div>
                       </div>
                    ))}
@@ -602,34 +774,85 @@ export default function App() {
 
           {activeTab === 'settings' && (
              <div className="max-w-3xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
-                 {/* ... (Store Profile & Preferences cards remain same) ... */}
-                 <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm">
+                 
+                 <div className="bg-white dark:bg-[#1e293b] p-6 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm">
                     <h3 className="font-black text-lg mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><span className="text-xl">🏪</span> Store Profile</h3>
                     <div className="grid grid-cols-1 gap-4">
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Store Name</label>
-                          <input className="w-full p-4 bg-slate-50 dark:bg-[#0f172a] rounded-xl text-sm font-bold border border-slate-200 dark:border-white/5 outline-none focus:ring-2 focus:ring-primary/20 transition dark:text-white" value={branch.name} onChange={e => setBranch({...branch, name: e.target.value})} placeholder="My Sari-Sari Store" />
+                          <input className="w-full p-4 bg-slate-50 dark:bg-[#0f172a] rounded-xl text-sm font-bold border border-slate-200 dark:border-white/5 outline-none focus:ring-2 focus:ring-[#6366f1]/20 transition dark:text-white" value={branch.name} onChange={e => setBranch({...branch, name: e.target.value})} placeholder="My Sari-Sari Store" />
                        </div>
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Address</label>
-                          <input className="w-full p-4 bg-slate-50 dark:bg-[#0f172a] rounded-xl text-sm font-bold border border-slate-200 dark:border-white/5 outline-none focus:ring-2 focus:ring-primary/20 transition dark:text-white" value={branch.address} onChange={e => setBranch({...branch, address: e.target.value})} placeholder="Barangay..." />
+                          <input className="w-full p-4 bg-slate-50 dark:bg-[#0f172a] rounded-xl text-sm font-bold border border-slate-200 dark:border-white/5 outline-none focus:ring-2 focus:ring-[#6366f1]/20 transition dark:text-white" value={branch.address} onChange={e => setBranch({...branch, address: e.target.value})} placeholder="Barangay..." />
                        </div>
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Contact Number</label>
-                          <input className="w-full p-4 bg-slate-50 dark:bg-[#0f172a] rounded-xl text-sm font-bold border border-slate-200 dark:border-white/5 outline-none focus:ring-2 focus:ring-primary/20 transition dark:text-white" value={branch.contact} onChange={e => setBranch({...branch, contact: e.target.value})} placeholder="0912..." />
+                          <input className="w-full p-4 bg-slate-50 dark:bg-[#0f172a] rounded-xl text-sm font-bold border border-slate-200 dark:border-white/5 outline-none focus:ring-2 focus:ring-[#6366f1]/20 transition dark:text-white" value={branch.contact} onChange={e => setBranch({...branch, contact: e.target.value})} placeholder="0912..." />
                        </div>
                     </div>
                  </div>
 
-                 <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm">
+                 {/* Removed Receipt Customization Section - Moved to Advanced Settings */}
+
+                 <div className="bg-white dark:bg-[#1e293b] p-6 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm">
+                     <h3 className="font-black text-lg mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><span className="text-xl">🎯</span> Business Goals</h3>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Daily Sales Target (₱)</label>
+                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3">
+                           <span className="text-emerald-500 font-black text-lg">₱</span>
+                           <input 
+                             type="number" 
+                             className="w-full bg-transparent text-sm font-bold dark:text-white text-slate-900 outline-none"
+                             value={settings.dailySalesTarget || ''}
+                             placeholder="0"
+                             onChange={e => setSettings({...settings, dailySalesTarget: parseFloat(e.target.value) || 0})}
+                           />
+                        </div>
+                        <p className="text-[9px] text-slate-400 px-1">Set a daily revenue goal to see a progress tracker on your dashboard.</p>
+                     </div>
+                 </div>
+
+                 <div className="bg-white dark:bg-[#1e293b] p-6 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm">
                      <h3 className="font-black text-lg mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><span className="text-xl">⚙️</span> Preferences</h3>
                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-[#0f172a] rounded-xl border border-slate-100 dark:border-white/5">
+                           <div>
+                              <p className="font-bold text-sm dark:text-white">App Theme</p>
+                              <p className="text-[10px] text-slate-400">Switch between Light and Dark mode</p>
+                           </div>
+                           <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg">
+                              <button 
+                                onClick={() => setSettings({...settings, theme: 'light'})}
+                                className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase transition ${settings.theme === 'light' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                              >
+                                ☀️ Light
+                              </button>
+                              <button 
+                                onClick={() => setSettings({...settings, theme: 'dark'})}
+                                className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase transition ${settings.theme === 'dark' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+                              >
+                                🌙 Dark
+                              </button>
+                           </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-[#0f172a] rounded-xl border border-slate-100 dark:border-white/5">
+                           <div>
+                              <p className="font-bold text-sm dark:text-white">Dashboard Financial Pulse</p>
+                              <p className="text-[10px] text-slate-400">Show real-time metrics on home screen</p>
+                           </div>
+                           <div onClick={() => setSettings({...settings, showFinancialPulseOnDashboard: !settings.showFinancialPulseOnDashboard})} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${settings.showFinancialPulseOnDashboard ? 'bg-[#6366f1]' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                             <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${settings.showFinancialPulseOnDashboard ? 'translate-x-5' : ''}`} />
+                           </div>
+                        </div>
+
                         <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-[#0f172a] rounded-xl border border-slate-100 dark:border-white/5">
                            <div>
                               <p className="font-bold text-sm dark:text-white">Auto-Print Receipt</p>
                               <p className="text-[10px] text-slate-400">Print immediately after transaction</p>
                            </div>
-                           <div onClick={() => setSettings({...settings, autoPrintReceipt: !settings.autoPrintReceipt})} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${settings.autoPrintReceipt ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                           <div onClick={() => setSettings({...settings, autoPrintReceipt: !settings.autoPrintReceipt})} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${settings.autoPrintReceipt ? 'bg-[#6366f1]' : 'bg-slate-300 dark:bg-slate-700'}`}>
                              <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${settings.autoPrintReceipt ? 'translate-x-5' : ''}`} />
                            </div>
                         </div>
@@ -638,7 +861,7 @@ export default function App() {
                               <p className="font-bold text-sm dark:text-white">Require Admin Approval</p>
                               <p className="text-[10px] text-slate-400">PIN needed for debts & large sales</p>
                            </div>
-                           <div onClick={() => setSettings({...settings, requireAdminApproval: !settings.requireAdminApproval})} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${settings.requireAdminApproval ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                           <div onClick={() => setSettings({...settings, requireAdminApproval: !settings.requireAdminApproval})} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${settings.requireAdminApproval ? 'bg-[#6366f1]' : 'bg-slate-300 dark:bg-slate-700'}`}>
                              <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${settings.requireAdminApproval ? 'translate-x-5' : ''}`} />
                            </div>
                         </div>
@@ -657,32 +880,27 @@ export default function App() {
                  </div>
 
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <button onClick={() => setShowFinancialPulse(true)} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
+                    <button onClick={() => setShowFinancialPulse(true)} className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/5 hover:border-[#6366f1] transition group text-left">
                        <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">📈</span>
                        <p className="font-black text-xs uppercase dark:text-white">Financial Pulse</p>
                        <p className="text-[10px] text-slate-400">View real-time metrics</p>
                     </button>
-                    <button onClick={() => setShowHardwareSettings(true)} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
+                    <button onClick={() => setShowHardwareSettings(true)} className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/5 hover:border-[#6366f1] transition group text-left">
                        <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">🖨️</span>
                        <p className="font-black text-xs uppercase dark:text-white">Hardware Settings</p>
                        <p className="text-[10px] text-slate-400">Connect Printer & Scanner</p>
                     </button>
-                    <button onClick={() => setShowReceipt({ record: records[0] || MOCK_PREVIEW_RECORD, autoPrint: false })} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
-                       <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">🧾</span>
-                       <p className="font-black text-xs uppercase dark:text-white">Receipt Template</p>
-                       <p className="text-[10px] text-slate-400">Customize layout & logo</p>
-                    </button>
-                    <button onClick={() => requireAdmin(() => setShowBackupRestore(true))} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
+                    <button onClick={() => requireAdmin(() => setShowBackupRestore(true))} className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/5 hover:border-[#6366f1] transition group text-left">
                        <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">💾</span>
                        <p className="font-black text-xs uppercase dark:text-white">Backup & Restore</p>
                        <p className="text-[10px] text-slate-400">Save data to file</p>
                     </button>
-                    <button onClick={() => requireAdmin(() => setShowSync(true))} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
+                    <button onClick={() => requireAdmin(() => setShowSync(true))} className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/5 hover:border-[#6366f1] transition group text-left">
                        <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">🔄</span>
                        <p className="font-black text-xs uppercase dark:text-white">Sync Devices</p>
                        <p className="text-[10px] text-slate-400">Transfer data P2P</p>
                     </button>
-                    <button onClick={() => setShowUserGuide(true)} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-primary transition group text-left">
+                    <button onClick={() => setShowUserGuide(true)} className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/5 hover:border-[#6366f1] transition group text-left">
                        <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform origin-left">📚</span>
                        <p className="font-black text-xs uppercase dark:text-white">User Guide</p>
                        <p className="text-[10px] text-slate-400">Manual & Tutorials</p>
@@ -762,12 +980,37 @@ export default function App() {
       {showPartialPay && <PartialPayModal record={showPartialPay} onClose={() => setShowPartialPay(null)} onPay={(amount) => { const updated = { ...showPartialPay, paidAmount: showPartialPay.paidAmount + amount, isPaid: (showPartialPay.paidAmount + amount) >= showPartialPay.totalAmount }; setRecords(records.map(r => r.id === showPartialPay.id ? updated : r)); setShowPartialPay(null); setShowRecordDetails(updated); }} />}
       {showReminder && <ReminderModal record={showReminder} onClose={() => setShowReminder(null)} onSave={(freq, date) => { const updated = { ...showReminder, reminderFrequency: freq, nextReminderDate: date }; setRecords(records.map(r => r.id === showReminder.id ? updated : r)); }} />}
       {showCustomerQR && <CustomerQRModal customer={showCustomerQR} branch={branch} onClose={() => setShowCustomerQR(null)} />}
-      {showAdvancedSettings && <AdvancedSettingsModal settings={settings} setSettings={setSettings} onClose={() => setShowAdvancedSettings(false)} />}
+      
+      {showCustomerHistory && (
+         <CustomerHistoryModal 
+            customer={showCustomerHistory} 
+            records={records} 
+            onClose={() => setShowCustomerHistory(null)} 
+            onViewRecord={(r) => { setShowRecordDetails(r); }}
+            onDelete={'id' in showCustomerHistory ? () => handleDeleteCustomer(showCustomerHistory.id) : undefined}
+            isAdmin={currentUserRole === 'admin'}
+         />
+      )}
+      
+      {showAdvancedSettings && <AdvancedSettingsModal settings={settings} setSettings={setSettings} onClose={() => setShowAdvancedSettings(false)} onOpenReceiptStudio={() => { setShowAdvancedSettings(false); setShowReceipt({ record: MOCK_PREVIEW_RECORD, autoPrint: false, editMode: true }); }} />}
       {showBackupRestore && <BackupRestoreModal inventory={inventory} customers={customers} records={records} settings={settings} branch={branch} onClose={() => setShowBackupRestore(false)} onRestore={handleRestore} lastSaved={new Date().toLocaleString()} />}
       {showSync && <SyncDevicesModal currentData={{ inventory, customers, records, settings, branch }} onRestore={handleRestore} onClose={() => setShowSync(false)} />}
       {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
       {showAdminAuth && <AdminPINModal adminPinHash={adminPinHash} onVerify={showAdminAuth.onVerify} onCancel={() => setShowAdminAuth(null)} />}
-      {showConfirm && <ConfirmModal isOpen={true} title={showConfirm.title} message={showConfirm.message} onConfirm={showConfirm.onConfirm} onCancel={() => setShowConfirm(null)} />}
+      
+      {showConfirm && (
+        <ConfirmModal 
+          isOpen={true} 
+          title={showConfirm.title} 
+          message={showConfirm.message} 
+          confirmLabel={showConfirm.confirmLabel}
+          cancelLabel={showConfirm.cancelLabel}
+          isDanger={showConfirm.isDanger}
+          onConfirm={showConfirm.onConfirm} 
+          onCancel={() => setShowConfirm(null)} 
+        />
+      )}
+      
       {showHardwareSettings && <HardwareSettingsModal onClose={() => setShowHardwareSettings(false)} />}
       {showScanner && <BarcodeScanner onScan={(code) => {
             let customerId = code; if (code.startsWith('CID:')) { customerId = code.replace('CID:', ''); }

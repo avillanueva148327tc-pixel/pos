@@ -6,25 +6,27 @@ interface UserGuideModalProps {
 }
 
 const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'basics' | 'pos' | 'inventory' | 'customers'>('basics');
+  const [activeTab, setActiveTab] = useState<'basics' | 'pos' | 'inventory' | 'customers' | 'insights' | 'advanced'>('basics');
 
   const tabs = [
     { id: 'basics', label: 'Basics', icon: '🏠' },
     { id: 'pos', label: 'Point of Sale', icon: '💸' },
     { id: 'inventory', label: 'Inventory', icon: '📦' },
     { id: 'customers', label: 'Suki Mgmt', icon: '👥' },
+    { id: 'insights', label: 'Reports', icon: '📊' },
+    { id: 'advanced', label: 'Adv. Tools', icon: '🛠️' },
   ];
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center z-[500] p-4 animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-slate-200 dark:border-white/10">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-slate-200 dark:border-white/10">
         
         {/* Sidebar / Tabs */}
         <div className="w-full md:w-64 bg-slate-50 dark:bg-[#0f172a] p-6 border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 flex flex-col">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">User Guide</h2>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">System Manual v3.0</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">System Manual v3.5</p>
           
-          <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar">
+          <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-2 md:pb-0">
             {tabs.map(tab => (
               <button
                 key={tab.id}
@@ -63,14 +65,17 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                 <div className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-white/5">
                   <h4 className="font-black text-sm uppercase dark:text-white mb-2">🔐 Security PINs</h4>
                   <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-2 list-disc pl-4">
-                    <li><b>Admin (Default: 1234):</b> Full access to settings, editing stock, and deleting records.</li>
+                    <li><b>Admin (Default: 1234):</b> Full access to settings, editing stock, backups, and deleting records.</li>
                     <li><b>Cashier (Default: 0000):</b> Access to POS and viewing records only.</li>
                   </ul>
+                  <p className="text-[10px] mt-3 text-slate-400 italic">You can change these in Advanced Settings.</p>
                 </div>
                 <div className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-white/5">
-                  <h4 className="font-black text-sm uppercase dark:text-white mb-2">💾 Auto-Save</h4>
+                  <h4 className="font-black text-sm uppercase dark:text-white mb-2">💾 Data Storage</h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Data is saved automatically to your device's browser storage every time you make a change. Always ensure you see the "Saved" indicator before closing.
+                    Data is saved automatically to your browser. 
+                    <br/><br/>
+                    <b>Important:</b> If you clear your browser history/cache, you might lose data. Use the <b>Backup & Restore</b> feature regularly to save your files safely.
                   </p>
                 </div>
               </div>
@@ -88,7 +93,7 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                     <div>
                       <h4 className="font-bold dark:text-white">Adding Items</h4>
                       <p className="text-sm text-slate-500 mt-1">
-                        Go to the <b>Terminal</b> tab. Click products from the catalog or use the Camera/Barcode Scanner button to add items to the basket.
+                        Go to the <b>New Transaction</b> (Terminal) button. Click products from the list, type to search, or click the Camera icon to scan barcodes.
                       </p>
                     </div>
                   </div>
@@ -96,9 +101,9 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                   <div className="flex gap-4">
                     <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-black shrink-0">2</div>
                     <div>
-                      <h4 className="font-bold dark:text-white">Selecting a Customer</h4>
+                      <h4 className="font-bold dark:text-white">Customer Identification</h4>
                       <p className="text-sm text-slate-500 mt-1">
-                        By default, transactions are for "Walk-in". Click "Member" to search for a registered Suki. You can check their current credit limit here.
+                        Select "Walk-in" for quick sales or "Member" to track debt. You can search Suki by name or scan their <b>Suki ID QR Code</b>.
                       </p>
                     </div>
                   </div>
@@ -106,10 +111,10 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                   <div className="flex gap-4">
                     <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-black shrink-0">3</div>
                     <div>
-                      <h4 className="font-bold dark:text-white">Checkout</h4>
+                      <h4 className="font-bold dark:text-white">Checkout Modes</h4>
                       <p className="text-sm text-slate-500 mt-1">
-                        <b>Pay Cash:</b> Completes the sale immediately.<br/>
-                        <b>Charge to Debt:</b> Adds the total to the customer's ledger. Requires Admin PIN if credit limit is exceeded.
+                        <b>Pay Cash:</b> Records a paid sale immediately.<br/>
+                        <b>Charge Debt:</b> Adds to the customer's balance. Requires Admin PIN if their Credit Limit is exceeded.
                       </p>
                     </div>
                   </div>
@@ -122,20 +127,32 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
             <div className="space-y-8 animate-in slide-in-from-right-4">
               <section>
                 <h3 className="text-2xl font-black dark:text-white mb-6">Inventory Management</h3>
-                <p className="text-slate-500 text-sm mb-6">Navigate to the <b>Inventory</b> tab to manage stock.</p>
+                <p className="text-slate-500 text-sm mb-6">Manage stock levels, costs, and product details.</p>
 
-                <div className="grid grid-cols-1 gap-4">
-                   <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-2xl">
-                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">Adding Stock</h5>
-                      <p className="text-xs text-slate-500">Click "Add Item". You can scan a barcode to auto-fill the code field. Supports Units (pc, kg, L) and Packs.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="p-5 border border-slate-200 dark:border-slate-700 rounded-3xl bg-slate-50 dark:bg-slate-800">
+                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">New Items</h5>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Click "Add Stock". Fill in Name, Price, and Initial Stock. You can select "Pack" units to automatically handle bulk items (e.g., 1 Case = 24 pcs).
+                      </p>
                    </div>
-                   <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-2xl">
-                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">Pack/Bulk Units</h5>
-                      <p className="text-xs text-slate-500">When adding an item, select "Pack" as unit. Define "Items per Pack". The system automatically calculates total pieces for you.</p>
+                   <div className="p-5 border border-slate-200 dark:border-slate-700 rounded-3xl bg-slate-50 dark:bg-slate-800">
+                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">Restocking (Batch)</h5>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Use "Stock In" to add multiple items at once from a purchase receipt. This tracks your expenses and updates inventory counts in one go.
+                      </p>
                    </div>
-                   <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-2xl">
-                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">Restocking</h5>
-                      <p className="text-xs text-slate-500">Click the "Stock" button on any item card to perform a quick incremental add (+12, +24) or a full manual override.</p>
+                   <div className="p-5 border border-slate-200 dark:border-slate-700 rounded-3xl bg-slate-50 dark:bg-slate-800">
+                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">Quick Adjust</h5>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        On the Inventory tab, click "Adjust Stock" on any item to quickly add (+1, +10) or remove stock, or set a specific physical count.
+                      </p>
+                   </div>
+                   <div className="p-5 border border-slate-200 dark:border-slate-700 rounded-3xl bg-slate-50 dark:bg-slate-800">
+                      <h5 className="font-black text-xs uppercase mb-1 dark:text-white">Low Stock</h5>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Items below their reorder level appear in the "Low Stock" filter. You can set the reorder level per item.
+                      </p>
                    </div>
                 </div>
               </section>
@@ -148,15 +165,100 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                 <h3 className="text-2xl font-black dark:text-white mb-6">Suki & Debt Management</h3>
                 
                 <div className="space-y-4">
-                   <p className="text-sm text-slate-500">
-                     <b>Registering:</b> Go to Customers tab > New Suki. Set a credit limit to control how much they can owe.
-                   </p>
-                   <p className="text-sm text-slate-500">
-                     <b>QR IDs:</b> Click the <span className="inline-block px-1 bg-slate-200 rounded text-[10px]">🪪</span> icon on a customer card to generate a unique QR/Barcode ID. Save this image and send it to them. They can show this image to the camera scanner at checkout for instant identification.
-                   </p>
-                   <p className="text-sm text-slate-500">
-                     <b>Payments:</b> Go to the Debt (Terminal) tab. Click an active debt record. Click "Partial Pay" or "Settle Full Balance" to record a payment.
-                   </p>
+                   <div className="flex gap-3 items-start">
+                      <span className="text-xl">👥</span>
+                      <div>
+                        <p className="font-bold text-sm dark:text-white">Registration</p>
+                        <p className="text-xs text-slate-500 mt-1">Go to Customers tab > Add Suki. Set a <b>Credit Limit</b> to control max debt.</p>
+                      </div>
+                   </div>
+                   
+                   <div className="flex gap-3 items-start">
+                      <span className="text-xl">🪪</span>
+                      <div>
+                        <p className="font-bold text-sm dark:text-white">Digital IDs</p>
+                        <p className="text-xs text-slate-500 mt-1">Click the ID icon on a customer card to generate a QR code. Save and send this image to them. They can present it at the terminal for instant checkout.</p>
+                      </div>
+                   </div>
+
+                   <div className="flex gap-3 items-start">
+                      <span className="text-xl">💰</span>
+                      <div>
+                        <p className="font-bold text-sm dark:text-white">Collecting Payments</p>
+                        <p className="text-xs text-slate-500 mt-1">Go to the Debts tab. Click a record. Select "Settle Full Balance" or "Partial Pay" to deduct from their debt. You can also print a Statement of Account.</p>
+                      </div>
+                   </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === 'insights' && (
+            <div className="space-y-8 animate-in slide-in-from-right-4">
+              <section>
+                <h3 className="text-2xl font-black dark:text-white mb-6">Reports & Analytics</h3>
+                <p className="text-slate-500 text-sm mb-6">Understand your store's performance in the <b>Insights</b> tab.</p>
+
+                <div className="grid grid-cols-1 gap-4">
+                   <div className="p-5 rounded-3xl bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-500/20">
+                      <h5 className="font-black text-xs uppercase mb-2 dark:text-white">Financial Pulse</h5>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        The Dashboard and Insights tab show real-time cards for <b>Sales Today</b>, <b>Unpaid Debt</b>, and <b>Inventory Value</b>. Use the "Eye" icon to hide values for privacy.
+                      </p>
+                   </div>
+                   
+                   <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <h5 className="font-black text-xs uppercase mb-2 dark:text-white">Charts</h5>
+                      <ul className="text-xs text-slate-500 space-y-2 list-disc pl-4">
+                         <li><b>Sales vs. Debt Trend:</b> See how much cash you collected vs how much credit you gave over the last 7 days.</li>
+                         <li><b>Inventory Distribution:</b> See which categories (e.g., Canned Goods, Snacks) hold the most value in your stock.</li>
+                      </ul>
+                   </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === 'advanced' && (
+            <div className="space-y-8 animate-in slide-in-from-right-4">
+              <section>
+                <h3 className="text-2xl font-black dark:text-white mb-6">Advanced Tools</h3>
+                
+                <div className="space-y-6">
+                   <div>
+                      <div className="flex items-center gap-2 mb-2">
+                         <span className="text-xl">📂</span>
+                         <h4 className="font-bold text-sm dark:text-white">Backup & Restore</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 ml-8 leading-relaxed">
+                         <b>JSON Archive:</b> Creates a full copy of your entire system. Use this for safe keeping.<br/>
+                         <b>CSV Export:</b> Downloads spreadsheets compatible with Excel/Google Sheets for manual reporting.<br/>
+                         <b>Restore:</b> Load a previous backup file to recover data.
+                      </p>
+                   </div>
+
+                   <div>
+                      <div className="flex items-center gap-2 mb-2">
+                         <span className="text-xl">🔄</span>
+                         <h4 className="font-bold text-sm dark:text-white">Device Sync</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 ml-8 leading-relaxed">
+                         Transfer all your data to another device (e.g., from Phone to Laptop). 
+                         Open "Sync Devices" on both. One sets to "Send" (Host), the other "Receive" (Scan QR). 
+                         Requires internet connection.
+                      </p>
+                   </div>
+
+                   <div>
+                      <div className="flex items-center gap-2 mb-2">
+                         <span className="text-xl">🖨️</span>
+                         <h4 className="font-bold text-sm dark:text-white">Hardware Settings</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 ml-8 leading-relaxed">
+                         Connect a <b>Bluetooth</b> or <b>USB Thermal Printer</b> for physical receipts.
+                         Customize the receipt layout (Logo, Address, Footer) in the "Settings" tab > "Receipt Template".
+                      </p>
+                   </div>
                 </div>
               </section>
             </div>

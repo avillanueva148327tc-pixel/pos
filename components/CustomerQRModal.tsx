@@ -88,9 +88,11 @@ const CustomerQRModal: React.FC<CustomerQRModalProps> = ({ customer, branch, onC
               <div className="flex-1 mr-4 min-w-0">
                 <p className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Loyalty Member</p>
                 <h3 className="text-lg md:text-xl font-black truncate leading-tight uppercase tracking-tight">{customer.name}</h3>
-                {customer.department && (
-                  <p className="text-[9px] font-bold text-primary/80 uppercase tracking-widest mt-1">🏢 {customer.department}</p>
-                )}
+                <div className="flex items-center gap-3 mt-2">
+                   {customer.department && (
+                     <p className="text-[9px] font-bold text-primary/80 uppercase tracking-widest">🏢 {customer.department}</p>
+                   )}
+                </div>
                 
                 <div className="mt-4 flex gap-4 text-[7px] font-black uppercase tracking-tighter">
                    <div>

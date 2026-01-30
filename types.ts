@@ -30,11 +30,14 @@ export interface ReceiptTemplate {
   paperWidth: '58mm' | '80mm' | 'A4' | 'Letter' | 'A4-6' | 'full';
   fontFamily: ReceiptFont;
   fontSize: number;
+  headerFontSize?: number;
+  itemFontSize?: number;
   layout: ReceiptLayout;
   accentColor: string;
 }
 
 export type AppLanguage = 'en' | 'tl' | 'bis';
+export type AppTheme = 'light' | 'dark';
 
 export interface AuthConfig {
   adminPin: string;
@@ -46,8 +49,11 @@ export interface AppSettings {
   expiryThresholdDays: number;
   lowStockThreshold: number;
   language: AppLanguage;
+  theme: AppTheme;
+  dailySalesTarget: number;
   autoPrintReceipt: boolean;
   requireAdminApproval: boolean;
+  showFinancialPulseOnDashboard: boolean;
   auth: AuthConfig;
   receiptTemplate: ReceiptTemplate;
   uiCustomization: {
@@ -67,7 +73,7 @@ export interface Customer {
   address?: string;
   creditLimit?: number;
   createdAt: string;
-  barcode?: string; // Physical ID card or loyalty card number
+  barcode?: string;
 }
 
 export type MeasurementUnit = 'pc' | 'ml' | 'L' | 'g' | 'kg' | 'pack';
@@ -83,7 +89,7 @@ export interface InventoryItem {
   itemsPerPack?: number;
   expiryDate?: string;
   barcode?: string;
-  volume?: string; // Keep for backward compatibility
+  volume?: string;
   unit: MeasurementUnit;
   measurementValue?: number;
   imageUrl?: string;
@@ -94,7 +100,7 @@ export interface UtangItem {
   name: string;
   quantity: number;
   price: number;
-  volume?: string; // Keep for backward compatibility
+  volume?: string;
   unit?: MeasurementUnit;
   measurementValue?: number;
   date: string;
