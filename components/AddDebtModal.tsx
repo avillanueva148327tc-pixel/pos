@@ -21,6 +21,7 @@ interface AddDebtModalProps {
   initialRecord?: UtangRecord | null;
   initialCustomer?: Customer | null;
   initialItem?: InventoryItem | null;
+  autoStartScanner?: boolean;
 }
 
 const AddDebtModal: React.FC<AddDebtModalProps> = ({ 
@@ -39,7 +40,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   onRegisterCustomer,
   initialRecord,
   initialCustomer,
-  initialItem
+  initialItem,
+  autoStartScanner = false
 }) => {
   const [isWalkIn, setIsWalkIn] = useState(() => {
     if (initialRecord) return initialRecord.customerName === 'Walk-in Customer';
@@ -110,6 +112,13 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     if (isWalkIn || !selectedCustomer || !selectedCustomer.creditLimit) return false;
     return (currentDebt + finalAmountToPay) > selectedCustomer.creditLimit;
   }, [currentDebt, finalAmountToPay, selectedCustomer, isWalkIn]);
+
+  // Auto-start scanner if requested
+  useEffect(() => {
+    if (autoStartScanner && !initialRecord) {
+      setScannerMode('product');
+    }
+  }, [autoStartScanner, initialRecord]);
 
   useEffect(() => {
     if (isWalkIn) {
@@ -199,7 +208,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       setIsWalkIn(false);
       setIsCustomerSelected(true);
       setCustomerNotFoundError(false);
-      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+      // Haptic feedback handled by scanner component on SUCCESS return
       return ScanResultStatus.SUCCESS;
     }
 
@@ -221,6 +230,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     }
 
     if (window.confirm(`Item '${decodedText}' not found.\nClick OK to add to Inventory.\nClick Cancel to add as one-off custom item.`)) {
+        // Critical Fix: Close scanner before opening Inventory Modal to prevent z-index issues
+        setScannerMode(null);
         onAddNewInventory(decodedText);
         return ScanResultStatus.IDLE;
     } else {
@@ -233,7 +244,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
        setScannerMode(null);
     }
 
-    return ScanResultStatus.NOT_FOUND;
+    return ScanResultStatus.IDLE; // Returning IDLE since we handled the "Not Found" case manually
   };
 
   const verifyAdminAuth = async () => {
@@ -333,8 +344,12 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
           {/* Header */}
           <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#0f172a] shrink-0">
              <div>
-               <h3 className="text-xl font-black text-white uppercase tracking-tight">New Transaction</h3>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{branch.name}</p>
+               <h3 className="text-xl font-black text-white uppercase tracking-tight">
+                 {autoStartScanner ? 'Terminal Mode' : 'New Transaction'}
+               </h3>
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                 {autoStartScanner ? 'RAPID SCAN ACTIVE' : branch.name}
+               </p>
              </div>
              <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-rose-500 transition">✕</button>
           </div>
@@ -393,7 +408,13 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       />
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">📦</span>
                    </div>
-                   <button onClick={() => setScannerMode('product')} className="w-14 h-auto bg-[#1e293b] rounded-2xl flex items-center justify-center text-xl border border-slate-700 text-slate-400 hover:text-white transition" title="Scan Product Barcode">📷</button>
+                   <button 
+                     onClick={() => setScannerMode('product')} 
+                     className={`w-14 h-auto rounded-2xl flex items-center justify-center text-xl border transition ${autoStartScanner ? 'bg-[#6366f1] text-white border-transparent shadow-lg animate-pulse' : 'bg-[#1e293b] border-slate-700 text-slate-400 hover:text-white'}`}
+                     title="Scan Product Barcode"
+                   >
+                     📷
+                   </button>
                 </div>
                 
                 {productSearch && (

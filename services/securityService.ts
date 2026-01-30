@@ -7,6 +7,7 @@
 export class SecurityService {
   private static ITERATIONS = 100000;
   private static SALT = new TextEncoder().encode('SariSariSalt_2024');
+  private static STORAGE_KEY_NAME = 'sys_skey_v1';
 
   /**
    * Helper to convert Uint8Array to Base64 without stack overflow.
@@ -34,6 +35,33 @@ export class SecurityService {
   }
 
   /**
+   * Retrieves or Generates a persistent System Encryption Key.
+   */
+  private static async getSystemKey(): Promise<CryptoKey> {
+    const rawKey = localStorage.getItem(this.STORAGE_KEY_NAME);
+    
+    if (!rawKey) {
+      // Generate new key if none exists
+      const key = await window.crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+      const exported = await window.crypto.subtle.exportKey('jwk', key);
+      localStorage.setItem(this.STORAGE_KEY_NAME, JSON.stringify(exported));
+      return key;
+    }
+
+    return window.crypto.subtle.importKey(
+      'jwk',
+      JSON.parse(rawKey),
+      { name: 'AES-GCM' },
+      true,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  /**
    * Generates a secure hash of a PIN for storage.
    */
   static async hashPin(pin: string): Promise<string> {
@@ -46,14 +74,78 @@ export class SecurityService {
   }
 
   /**
-   * Encrypts data using a PIN-derived key.
+   * Securely saves data to localStorage using AES-GCM encryption.
+   */
+  static async secureSave(key: string, data: any): Promise<void> {
+    try {
+      const cryptoKey = await this.getSystemKey();
+      const encoder = new TextEncoder();
+      const encodedData = encoder.encode(JSON.stringify(data));
+      const iv = window.crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV
+      
+      const encryptedContent = await window.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        cryptoKey,
+        encodedData
+      );
+
+      // Pack IV and Ciphertext together
+      const combined = new Uint8Array(iv.length + encryptedContent.byteLength);
+      combined.set(iv);
+      combined.set(new Uint8Array(encryptedContent), iv.length);
+      
+      localStorage.setItem(key, this.bytesToBase64(combined));
+    } catch (e) {
+      console.error(`SecurityService: Failed to save ${key}`, e);
+    }
+  }
+
+  /**
+   * Loads data from localStorage, attempting to decrypt it.
+   * Falls back to plain JSON parsing if decryption fails (Migration Strategy).
+   */
+  static async secureLoad<T>(key: string, defaultValue: T): Promise<T> {
+    const raw = localStorage.getItem(key);
+    if (!raw) return defaultValue;
+
+    try {
+      // 1. Try to treat as encrypted blob
+      const combined = this.base64ToBytes(raw);
+      
+      // Basic check: encrypted data usually doesn't start with { or [ char codes
+      // But we just try-catch the decrypt process.
+      
+      const cryptoKey = await this.getSystemKey();
+      const iv = combined.slice(0, 12);
+      const data = combined.slice(12);
+
+      const decryptedBuffer = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        cryptoKey,
+        data
+      );
+
+      const decoder = new TextDecoder();
+      return JSON.parse(decoder.decode(decryptedBuffer));
+    } catch (e) {
+      // 2. Decryption failed? It might be old plain-text data.
+      try {
+        return JSON.parse(raw);
+      } catch (jsonError) {
+        console.warn(`SecurityService: Data corruption for ${key}, resetting to default.`);
+        return defaultValue;
+      }
+    }
+  }
+
+  /**
+   * Encrypts data using a PIN-derived key (User specific).
    */
   static async encrypt(data: any, pin: string): Promise<string> {
     try {
       const encoder = new TextEncoder();
       const rawData = encoder.encode(JSON.stringify(data));
       
-      // Derive key from PIN
       const baseKey = await window.crypto.subtle.importKey(
         'raw', encoder.encode(pin), 'PBKDF2', false, ['deriveKey']
       );
@@ -72,7 +164,6 @@ export class SecurityService {
         rawData
       );
 
-      // Combine IV and Encrypted Data
       const combined = new Uint8Array(iv.length + encrypted.byteLength);
       combined.set(iv);
       combined.set(new Uint8Array(encrypted), iv.length);
@@ -85,7 +176,7 @@ export class SecurityService {
   }
 
   /**
-   * Decrypts data using a PIN-derived key.
+   * Decrypts data using a PIN-derived key (User specific).
    */
   static async decrypt(encryptedBase64: string, pin: string): Promise<any | null> {
     try {
