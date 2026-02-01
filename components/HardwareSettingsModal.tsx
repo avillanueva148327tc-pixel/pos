@@ -12,6 +12,7 @@ const HardwareSettingsModal: React.FC<HardwareSettingsModalProps> = ({ onClose }
   const [isScanning, setIsScanning] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [driverError, setDriverError] = useState(false);
+  const [showZadigGuide, setShowZadigGuide] = useState(false);
   
   const isSecure = window.isSecureContext;
 
@@ -30,6 +31,7 @@ const HardwareSettingsModal: React.FC<HardwareSettingsModalProps> = ({ onClose }
   const handleConnect = async (type: 'bluetooth' | 'usb') => {
     setIsScanning(true);
     setDriverError(false);
+    setShowZadigGuide(false);
     setStatusMsg(`Searching for ${type === 'bluetooth' ? 'Bluetooth' : 'USB'} devices...`);
     
     try {
@@ -74,10 +76,10 @@ const HardwareSettingsModal: React.FC<HardwareSettingsModalProps> = ({ onClose }
 
   return (
     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[500] p-4 animate-in fade-in">
-      <div className="bg-[#0f172a] w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10 flex flex-col">
+      <div className="bg-[#0f172a] w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10 flex flex-col max-h-[90vh]">
         
         {/* Header */}
-        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-[#0f172a]">
+        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-[#0f172a] shrink-0">
           <div>
             <h3 className="text-xl font-black text-white uppercase tracking-tight">Hardware Setup</h3>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Manage Peripherals</p>
@@ -156,11 +158,47 @@ const HardwareSettingsModal: React.FC<HardwareSettingsModalProps> = ({ onClose }
                 <div className="mt-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl animate-in slide-in-from-top-2">
                    <div className="flex items-start gap-3">
                       <span className="text-2xl">🛑</span>
-                      <div>
+                      <div className="flex-1">
                          <h5 className="text-xs font-black text-rose-400 uppercase mb-1">Driver Conflict Detected</h5>
-                         <p className="text-[10px] text-slate-400 leading-relaxed mb-2">
-                            Windows has locked this USB device. Replace the driver with <b>WinUSB</b> using Zadig.
+                         <p className="text-[10px] text-slate-400 leading-relaxed mb-3">
+                            Windows has locked this USB device. To use WebUSB, you must replace the current driver with <b>WinUSB</b>.
                          </p>
+                         
+                         {!showZadigGuide ? (
+                           <div className="flex gap-2">
+                              <a 
+                                href="https://zadig.akeo.ie/" 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="px-3 py-2 bg-rose-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-rose-600 transition"
+                              >
+                                Download Zadig
+                              </a>
+                              <button 
+                                onClick={() => setShowZadigGuide(true)}
+                                className="px-3 py-2 bg-white/5 text-white rounded-xl text-[10px] font-black uppercase hover:bg-white/10 transition border border-white/5"
+                              >
+                                How to Fix?
+                              </button>
+                           </div>
+                         ) : (
+                           <div className="bg-[#0f172a] p-3 rounded-xl border border-white/10 space-y-2 mt-2">
+                              <p className="text-[9px] font-black text-white uppercase border-b border-white/5 pb-1 mb-1">Step-by-Step Fix</p>
+                              <ol className="text-[10px] text-slate-400 list-decimal pl-4 space-y-1">
+                                <li>Download & Open <b>Zadig</b>.</li>
+                                <li>Go to <b>Options</b> &gt; <b>List All Devices</b>.</li>
+                                <li>Select your Printer from the dropdown.</li>
+                                <li>Ensure the target driver (right arrow) is <b>WinUSB</b>.</li>
+                                <li>Click <b>Replace Driver</b>.</li>
+                              </ol>
+                              <button 
+                                onClick={() => setShowZadigGuide(false)}
+                                className="w-full mt-2 py-1.5 bg-white/5 text-slate-400 rounded-lg text-[9px] font-black uppercase hover:text-white"
+                              >
+                                Close Guide
+                              </button>
+                           </div>
+                         )}
                       </div>
                    </div>
                 </div>

@@ -139,6 +139,9 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     e.preventDefault();
     if (!name) return;
 
+    // Safety check for packs
+    const safeItemsPerPack = parseFloat(itemsPerPackStr) || 1;
+
     const payload: any = {
       name,
       category,
@@ -150,7 +153,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
       price: parseFloat(priceStr) || 0,
       originalPrice: parseFloat(costStr) || 0,
       reorderLevel: parseFloat(reorderStr) || 0,
-      itemsPerPack: parseFloat(itemsPerPackStr) || 1
+      itemsPerPack: safeItemsPerPack > 0 ? safeItemsPerPack : 1
     };
 
     if (item?.id) payload.id = item.id;
@@ -280,7 +283,9 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                       </div>
                    </div>
                    <div>
-                      <label className={labelStyle}>RETAIL PRICE (₱)</label>
+                      <label className={labelStyle}>
+                        RETAIL PRICE <span className="opacity-50 text-[8px] font-bold">(PER {unit === 'pc' ? 'PC' : unit.toUpperCase()})</span>
+                      </label>
                       <div className={`${inputContainerStyle} bg-[#0f172a] border-emerald-500/30 focus-within:border-emerald-500 h-12`}>
                         <span className="pl-4 text-emerald-500 font-bold text-xs">₱</span>
                         <input 
@@ -318,8 +323,10 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                        >
                           <option value="pc" className="bg-[#1e293b]">Piece (pc)</option>
                           <option value="pack" className="bg-[#1e293b]">Pack (Bulk)</option>
-                          <option value="L" className="bg-[#1e293b]">Liter (L)</option>
                           <option value="kg" className="bg-[#1e293b]">Kilo (kg)</option>
+                          <option value="g" className="bg-[#1e293b]">Gram (g)</option>
+                          <option value="L" className="bg-[#1e293b]">Liter (L)</option>
+                          <option value="ml" className="bg-[#1e293b]">Milliliter (ml)</option>
                        </select>
                     </div>
                  </div>

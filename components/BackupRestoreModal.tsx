@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, BackupData, UtangItem } from '../types';
 
 interface BackupRestoreModalProps {
@@ -13,10 +13,71 @@ interface BackupRestoreModalProps {
   lastSaved?: string | null;
 }
 
+// Helper: robustly quote CSV fields
+const toCSVField = (val: any): string => {
+  const str = String(val === undefined || val === null ? '' : val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+
+// Helper: robust CSV parser (State Machine)
+const parseCSV = (text: string): string[][] => {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        currentField += '"';
+        i++; // Skip escaped quote
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentRow.push(currentField);
+        currentField = '';
+      } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+        currentRow.push(currentField);
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+        if (char === '\r') i++;
+      } else if (char !== '\r') {
+        currentField += char;
+      }
+    }
+  }
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField);
+    rows.push(currentRow);
+  }
+  return rows;
+};
+
+interface RestoreStats {
+  newCount: number;
+  updateCount: number;
+  type: 'JSON' | 'CSV';
+  dataType?: string;
+}
+
 const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   onClose, inventory, customers, records, settings, branch, onRestore, lastSaved
 }) => {
   const [activeTab, setActiveTab] = useState<'backup' | 'restore'>('backup');
+  const [dragActive, setDragActive] = useState(false);
   
   // Backup State
   const [selectedModules, setSelectedModules] = useState({
@@ -26,32 +87,27 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     settings: true
   });
   
-  // CSV specific selection
   const [csvModules, setCsvModules] = useState({
     inventory: true,
     customers: true,
     records: true
   });
 
-  const [isProcessing, setIsProcessing] = useState(false);
-
   // Restore State
-  const [restoreFile, setRestoreFile] = useState<File | null>(null);
-  const [previewData, setPreviewData] = useState<BackupData | null>(null);
+  const [restoreData, setRestoreData] = useState<Partial<BackupData['data']> | null>(null);
+  const [restoreStats, setRestoreStats] = useState<RestoreStats | null>(null);
   const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   
+  const [statusMsg, setStatusMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const csvInputRef = useRef<HTMLInputElement>(null);
-  const [csvType, setCsvType] = useState<'inventory' | 'customers' | 'records' | null>(null);
 
-  const handleExportJSON = async () => {
-    setIsProcessing(true);
+  // --- EXPORT LOGIC ---
+
+  const handleExportJSON = () => {
     try {
       const exportPayload: BackupData = {
         metadata: {
-          version: "3.2.0",
+          version: "3.5.0",
           date: new Date().toISOString(),
           type: "full_archive",
           encrypted: false
@@ -67,249 +123,209 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         exportPayload.data.branch = branch;
       }
 
-      const finalContent = JSON.stringify(exportPayload, null, 2);
-
-      const blob = new Blob([finalContent], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const filename = `SariSari_Backup_${new Date().toISOString().split('T')[0]}.json`;
-      
-      link.href = url;
-      link.download = filename;
-      link.click();
-      setSuccess("Backup downloaded successfully!");
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+      downloadBlob(blob, `SariSari_FullBackup_${new Date().toISOString().split('T')[0]}.json`);
+      setStatusMsg({ type: 'success', text: "JSON Archive downloaded successfully." });
     } catch (err) {
-      console.error(err);
-      setError("Failed to generate backup.");
-    } finally {
-      setIsProcessing(false);
+      setStatusMsg({ type: 'error', text: "Failed to generate JSON backup." });
     }
   };
 
-  const generateCSV = (type: 'inventory' | 'records' | 'customers') => {
-    let csvContent = "";
+  const handleExportCSV = (type: 'inventory' | 'records' | 'customers') => {
+    let content = "";
     let filename = "";
 
     if (type === 'inventory') {
-      csvContent = "Name,Category,Stock,Retail_Price,Cost,Unit,Barcode\n";
-      inventory.forEach(i => {
-        csvContent += `"${i.name}","${i.category}",${i.stock},${i.price},${i.originalPrice || 0},"${i.unit}","${i.barcode || ''}"\n`;
-      });
+      content = "Name,Category,Stock,Retail_Price,Cost,Unit,Barcode,Expiry\n";
+      content += inventory.map(i => 
+        [i.name, i.category, i.stock, i.price, i.originalPrice, i.unit, i.barcode, i.expiryDate].map(toCSVField).join(',')
+      ).join('\n');
       filename = `Inventory_${new Date().toISOString().split('T')[0]}.csv`;
-    } else if (type === 'records') {
-      csvContent = "Date,Customer,Total,Paid,Balance,Items\n";
-      records.forEach(r => {
-        const balance = r.totalAmount - r.paidAmount;
-        const itemsList = r.items.map(i => `${i.quantity}x ${i.name}`).join('; ');
-        csvContent += `"${r.date}","${r.customerName}",${r.totalAmount},${r.paidAmount},${balance},"${itemsList}"\n`;
-      });
-      filename = `Sales_Records_${new Date().toISOString().split('T')[0]}.csv`;
-    } else if (type === 'customers') {
-      csvContent = "Name,Contact,Address,Credit_Limit,ID\n";
-      customers.forEach(c => {
-        csvContent += `"${c.name}","${c.contact || ''}","${c.address || ''}",${c.creditLimit || 0},"${c.barcode || ''}"\n`;
-      });
+    } 
+    else if (type === 'customers') {
+      content = "Name,Nickname,Contact,Address,Credit_Limit,ID_Code\n";
+      content += customers.map(c => 
+        [c.name, c.nickname, c.contact, c.address, c.creditLimit, c.barcode].map(toCSVField).join(',')
+      ).join('\n');
       filename = `Customers_${new Date().toISOString().split('T')[0]}.csv`;
+    } 
+    else if (type === 'records') {
+      content = "Date,Customer,Items_Summary,Total_Amount,Paid_Amount,Balance,Is_Paid,Ref_ID\n";
+      content += records.map(r => {
+        const summary = r.items.map(i => `${i.quantity}x ${i.name}`).join('; ');
+        return [r.date, r.customerName, summary, r.totalAmount, r.paidAmount, r.totalAmount - r.paidAmount, r.isPaid ? 'Yes' : 'No', r.id].map(toCSVField).join(',');
+      }).join('\n');
+      filename = `Sales_Records_${new Date().toISOString().split('T')[0]}.csv`;
     }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
+    downloadBlob(new Blob([content], { type: 'text/csv;charset=utf-8;' }), filename);
   };
 
   const handleBulkCSVExport = () => {
-    let exportedCount = 0;
-    if (csvModules.inventory) { generateCSV('inventory'); exportedCount++; }
-    if (csvModules.customers) { 
-      setTimeout(() => generateCSV('customers'), 500); 
-      exportedCount++; 
-    }
-    if (csvModules.records) { 
-      setTimeout(() => generateCSV('records'), 1000); 
-      exportedCount++; 
-    }
+    let count = 0;
+    if (csvModules.inventory) { handleExportCSV('inventory'); count++; }
+    if (csvModules.customers) { setTimeout(() => handleExportCSV('customers'), 300); count++; }
+    if (csvModules.records) { setTimeout(() => handleExportCSV('records'), 600); count++; }
+    
+    if (count > 0) setStatusMsg({ type: 'success', text: `${count} CSV files downloaded.` });
+    else setStatusMsg({ type: 'error', text: "Select at least one module." });
+  };
 
-    if (exportedCount > 0) {
-      setSuccess(`Exported ${exportedCount} CSV files successfully.`);
-    } else {
-      setError("Please select at least one module to export.");
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // --- IMPORT LOGIC ---
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setRestoreFile(file);
-      analyzeFile(file);
+    if (e.target.files && e.target.files[0]) {
+      processFile(e.target.files[0]);
     }
   };
 
-  const analyzeFile = (file: File) => {
+  const processFile = (file: File) => {
+    setStatusMsg(null);
+    setRestoreData(null);
+    setRestoreStats(null);
+
     const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const text = ev.target?.result as string;
-      try {
-        const json = JSON.parse(text);
-        if (json.metadata && json.metadata.encrypted) {
-           setError("Encrypted backups are not supported in this version.");
-           setPreviewData(null);
-        } else if (json.metadata) {
-            setPreviewData(json);
-            setError(null);
-        } else {
-            // Fallback for files without metadata
-            setPreviewData({ metadata: { version: 'unknown', date: 'unknown', type: 'unknown', encrypted: false }, data: {} });
-        }
-      } catch (err) {
-        setError("Invalid file format.");
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      if (file.name.endsWith('.json')) {
+        processJSON(content);
+      } else if (file.name.endsWith('.csv')) {
+        processCSVImport(content, file.name);
+      } else {
+        setStatusMsg({ type: 'error', text: "Unsupported file type. Please use .JSON or .CSV" });
       }
     };
     reader.readAsText(file);
   };
 
-  // --- CSV Import Logic ---
-  const parseCSVLine = (text: string) => {
-    const re = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-    return text.split(re).map(field => field.replace(/^"|"$/g, '').trim());
-  };
-
-  const handleCSVSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && csvType) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        processCSVImport(ev.target?.result as string, csvType);
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const processCSVImport = (text: string, type: 'inventory' | 'customers' | 'records') => {
+  const processJSON = (jsonStr: string) => {
     try {
-      const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
-      if (lines.length < 2) throw new Error("Empty CSV");
+      const parsed = JSON.parse(jsonStr);
+      if (!parsed.data) throw new Error("Invalid structure");
       
-      const rows = lines.slice(1);
-      const importedData: any = {};
+      const data = parsed.data;
+      let newItems = 0;
+      let updates = 0;
 
-      if (type === 'inventory') {
-        const items: InventoryItem[] = [];
-        rows.forEach(row => {
-          const cols = parseCSVLine(row);
-          if (cols.length >= 3) { 
-             const [name, category, stock, price, cost, unit, barcode] = cols;
-             if (name) {
-               items.push({
-                 id: crypto.randomUUID(),
-                 name,
-                 category: category || 'Imported',
-                 stock: parseInt(stock) || 0,
-                 price: parseFloat(price) || 0,
-                 originalPrice: parseFloat(cost) || 0,
-                 unit: (unit as any) || 'pc',
-                 barcode: barcode || undefined,
-                 reorderLevel: 5
-               });
-             }
-          }
-        });
-        importedData.inventory = items;
-        setSuccess(`Recovered ${items.length} items from CSV.`);
-        
-      } else if (type === 'customers') {
-        const custs: Customer[] = [];
-        rows.forEach(row => {
-          const cols = parseCSVLine(row);
-          if (cols.length >= 1) {
-             const [name, contact, address, limit, id] = cols;
-             if (name) {
-               custs.push({
-                 id: id || crypto.randomUUID(),
-                 name,
-                 contact: contact || '',
-                 address: address || '',
-                 creditLimit: parseFloat(limit) || 0,
-                 createdAt: new Date().toLocaleString()
-               });
-             }
-          }
-        });
-        importedData.customers = custs;
-        setSuccess(`Recovered ${custs.length} customers from CSV.`);
-        
-      } else if (type === 'records') {
-        const recs: UtangRecord[] = [];
-        rows.forEach(row => {
-          const cols = parseCSVLine(row);
-          if (cols.length >= 6) {
-             const [date, customer, total, paid, balance, itemsStr] = cols;
-             const totalAmount = parseFloat(total) || 0;
-             const paidAmount = parseFloat(paid) || 0;
-             
-             // Try to parse items: "2x Item A; 1x Item B"
-             const items: UtangItem[] = [];
-             if (itemsStr) {
-               itemsStr.split(';').forEach(part => {
-                 const match = part.trim().match(/^(\d+)x\s+(.+)$/);
-                 if (match) {
-                   items.push({ 
-                     name: match[2], 
-                     quantity: parseInt(match[1]) || 1, 
-                     price: 0, // Price is lost in standard CSV, default to 0
-                     date: date 
-                   });
-                 }
-               });
-             }
-             
-             // If items array is empty but we have a total, create a generic item
-             if (items.length === 0) {
-               items.push({ name: 'Imported Transaction', quantity: 1, price: totalAmount, date });
-             } else if (items.length === 1) {
-               // If single item, we can recover the unit price
-               items[0].price = totalAmount / items[0].quantity;
-             }
-
-             if (customer) {
-               recs.push({
-                 id: crypto.randomUUID(),
-                 date: date || new Date().toLocaleString(),
-                 customerName: customer,
-                 totalAmount,
-                 paidAmount,
-                 isPaid: paidAmount >= totalAmount,
-                 items,
-                 quantity: items.reduce((acc, i) => acc + i.quantity, 0),
-                 product: items.map(i => i.name).join(', ')
-               });
-             }
-          }
-        });
-        importedData.records = recs;
-        setSuccess(`Recovered ${recs.length} records from CSV.`);
+      // Simple heuristic for stats (matches by ID)
+      if (data.inventory) {
+        data.inventory.forEach((i: InventoryItem) => inventory.some(ex => ex.id === i.id) ? updates++ : newItems++);
+      }
+      if (data.customers) {
+        data.customers.forEach((c: Customer) => customers.some(ex => ex.id === c.id) ? updates++ : newItems++);
       }
 
-      onRestore(importedData, 'merge'); 
-      
-    } catch (err) {
-      console.error(err);
-      setError("Failed to parse CSV. Ensure correct format.");
+      setRestoreData(data);
+      setRestoreStats({ type: 'JSON', newCount: newItems, updateCount: updates });
+    } catch (e) {
+      setStatusMsg({ type: 'error', text: "Invalid or corrupted JSON backup file." });
     }
   };
 
-  const triggerCSVImport = (type: 'inventory' | 'customers' | 'records') => {
-    setCsvType(type);
-    csvInputRef.current?.click();
+  const processCSVImport = (csvStr: string, filename: string) => {
+    try {
+      const rows = parseCSV(csvStr);
+      if (rows.length < 2) throw new Error("Empty CSV");
+
+      const header = rows[0].map(h => h.toLowerCase().trim());
+      const dataRows = rows.slice(1);
+      
+      let importedData: Partial<BackupData['data']> = {};
+      let dataType = '';
+      let newCount = 0;
+      let updateCount = 0;
+
+      // Detect Type based on headers
+      if (header.includes('stock') && header.includes('retail_price')) {
+        dataType = 'Inventory';
+        const items: InventoryItem[] = [];
+        dataRows.forEach(row => {
+          if (!row[0]) return; // Skip empty names
+          const item: any = { id: crypto.randomUUID(), unit: 'pc', reorderLevel: 5 };
+          
+          header.forEach((col, idx) => {
+            const val = row[idx];
+            if (col === 'name') item.name = val;
+            if (col === 'category') item.category = val;
+            if (col === 'stock') item.stock = parseFloat(val) || 0;
+            if (col === 'retail_price') item.price = parseFloat(val) || 0;
+            if (col === 'cost') item.originalPrice = parseFloat(val) || 0;
+            if (col === 'unit') item.unit = val || 'pc';
+            if (col === 'barcode') item.barcode = val;
+            if (col === 'expiry') item.expiryDate = val;
+          });
+
+          // Check if exists by name/barcode
+          if (inventory.some(ex => ex.name === item.name || (item.barcode && ex.barcode === item.barcode))) {
+            updateCount++;
+          } else {
+            newCount++;
+          }
+          items.push(item);
+        });
+        importedData.inventory = items;
+
+      } else if (header.includes('credit_limit')) {
+        dataType = 'Customers';
+        const custs: Customer[] = [];
+        dataRows.forEach(row => {
+          if (!row[0]) return;
+          const cust: any = { id: crypto.randomUUID(), createdAt: new Date().toLocaleString() };
+          
+          header.forEach((col, idx) => {
+            const val = row[idx];
+            if (col === 'name') cust.name = val;
+            if (col === 'contact') cust.contact = val;
+            if (col === 'address') cust.address = val;
+            if (col === 'credit_limit') cust.creditLimit = parseFloat(val) || 0;
+            if (col === 'id_code') cust.barcode = val;
+          });
+
+          if (customers.some(ex => ex.name.toLowerCase() === cust.name.toLowerCase())) updateCount++;
+          else newCount++;
+          
+          custs.push(cust);
+        });
+        importedData.customers = custs;
+
+      } else {
+        throw new Error("Unknown CSV format. Check headers.");
+      }
+
+      setRestoreData(importedData);
+      setRestoreStats({ type: 'CSV', dataType, newCount, updateCount });
+
+    } catch (e: any) {
+      setStatusMsg({ type: 'error', text: e.message || "Failed to parse CSV." });
+    }
   };
 
   const executeRestore = () => {
-    if (!previewData || !previewData.data) return;
-    onRestore(previewData.data, restoreMode);
-    setSuccess("System restored successfully!");
-    setTimeout(onClose, 1500);
+    if (restoreData) {
+      onRestore(restoreData, restoreMode);
+      setStatusMsg({ type: 'success', text: "Data restored successfully!" });
+      setRestoreData(null);
+      setRestoreStats(null);
+      setTimeout(onClose, 1500);
+    }
   };
 
   return (
@@ -328,206 +344,137 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         {/* Tabs */}
         <div className="flex p-2 bg-slate-50 dark:bg-[#0f172a] gap-2 px-8">
           <button 
-            onClick={() => { setActiveTab('backup'); setSuccess(null); setError(null); setPreviewData(null); }}
+            onClick={() => { setActiveTab('backup'); setStatusMsg(null); }}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'backup' ? 'bg-primary text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-400'}`}
           >
-            Create Backup
+            Export / Backup
           </button>
           <button 
-            onClick={() => { setActiveTab('restore'); setSuccess(null); setError(null); setPreviewData(null); }}
+            onClick={() => { setActiveTab('restore'); setStatusMsg(null); }}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'restore' ? 'bg-amber-500 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-400'}`}
           >
-            Restore Data
+            Import / Restore
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50 dark:bg-[#0f172a]/50">
           
-          {error && <div className="mb-4 p-4 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-2xl text-xs font-bold border border-rose-200 dark:border-rose-800">⚠️ {error}</div>}
-          {success && <div className="mb-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-2xl text-xs font-bold border border-emerald-200 dark:border-emerald-800">✅ {success}</div>}
+          {statusMsg && (
+            <div className={`mb-6 p-4 rounded-2xl text-xs font-bold border flex items-center gap-3 animate-in slide-in-from-top-2 ${statusMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 border-rose-200 dark:border-rose-800'}`}>
+              <span className="text-lg">{statusMsg.type === 'success' ? '✅' : '⚠️'}</span>
+              {statusMsg.text}
+            </div>
+          )}
 
           {activeTab === 'backup' ? (
-            <div className="space-y-10 animate-in slide-in-from-left-4">
+            <div className="space-y-8 animate-in slide-in-from-left-4">
               
-              {/* Full System Archive Section */}
-              <div className="space-y-4">
-                <div className="flex justify-between items-end">
-                   <h4 className="text-sm font-black text-slate-700 dark:text-white uppercase tracking-wider">Full System Archive (JSON)</h4>
-                   {lastSaved && <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg">Auto-saved: {lastSaved}</span>}
+              {/* Full JSON */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-white/5 space-y-4 shadow-sm">
+                <div className="flex justify-between items-start">
+                   <div>
+                      <h4 className="font-black text-sm dark:text-white uppercase">Full Archive (JSON)</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Recommended for complete system transfer.</p>
+                   </div>
+                   <span className="text-2xl">📦</span>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-wrap gap-2">
                   {Object.keys(selectedModules).map(key => (
-                    <div key={key} onClick={() => setSelectedModules(prev => ({...prev, [key]: !prev[key as keyof typeof selectedModules]}))} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedModules[key as keyof typeof selectedModules] ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-500' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-black uppercase text-slate-700 dark:text-slate-200">{key}</span>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${selectedModules[key as keyof typeof selectedModules] ? 'bg-indigo-500 text-white' : 'bg-slate-200'}`}>✓</div>
-                      </div>
-                    </div>
+                    <button key={key} onClick={() => setSelectedModules(prev => ({...prev, [key]: !prev[key as keyof typeof selectedModules]}))} className={`px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all border ${selectedModules[key as keyof typeof selectedModules] ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-transparent text-slate-400 border-slate-200 dark:border-slate-700'}`}>
+                      {key}
+                    </button>
                   ))}
                 </div>
 
-                <button 
-                  onClick={handleExportJSON}
-                  disabled={isProcessing || (!Object.values(selectedModules).includes(true))}
-                  className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-[1.01] active:scale-[0.98] transition disabled:opacity-50"
-                >
-                  {isProcessing ? 'Generating...' : 'Download JSON Archive 📥'}
+                <button onClick={handleExportJSON} className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:scale-[1.01] transition">
+                  Download Archive
                 </button>
               </div>
 
-              <div className="h-px bg-slate-200 dark:bg-white/10 w-full"></div>
-
-              {/* CSV Export Section */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-black text-slate-700 dark:text-white uppercase tracking-wider">Spreadsheet Export (CSV)</h4>
-                  <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-[9px] font-bold rounded uppercase">Compatible with Excel</span>
-                </div>
-                
-                <p className="text-[10px] text-slate-500">Select modules to generate individual CSV files:</p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div onClick={() => setCsvModules(prev => ({...prev, inventory: !prev.inventory}))} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group ${csvModules.inventory ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-500' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">📦</span>
-                      <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">Inventory</span>
-                    </div>
-                    {csvModules.inventory && <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px]">✓</div>}
-                  </div>
-
-                  <div onClick={() => setCsvModules(prev => ({...prev, customers: !prev.customers}))} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group ${csvModules.customers ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-500' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">👥</span>
-                      <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">Customers</span>
-                    </div>
-                    {csvModules.customers && <div className="w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[8px]">✓</div>}
-                  </div>
-
-                  <div onClick={() => setCsvModules(prev => ({...prev, records: !prev.records}))} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group ${csvModules.records ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-500' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">📄</span>
-                      <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">Sales Recs</span>
-                    </div>
-                    {csvModules.records && <div className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[8px]">✓</div>}
-                  </div>
+              {/* CSV Export */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-white/5 space-y-4 shadow-sm">
+                <div className="flex justify-between items-start">
+                   <div>
+                      <h4 className="font-black text-sm dark:text-white uppercase">Spreadsheets (CSV)</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">For Excel or Google Sheets.</p>
+                   </div>
+                   <span className="text-2xl">📊</span>
                 </div>
 
-                <button 
-                  onClick={handleBulkCSVExport}
-                  disabled={!Object.values(csvModules).some(Boolean)}
-                  className="w-full py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 transition active:scale-[0.98] disabled:opacity-50"
-                >
-                  Export Selected Modules to CSV
+                <div className="grid grid-cols-3 gap-2">
+                   {['inventory', 'customers', 'records'].map(k => (
+                      <div key={k} onClick={() => setCsvModules(p => ({...p, [k]: !p[k as keyof typeof csvModules]}))} className={`p-3 rounded-xl border cursor-pointer text-center transition-all ${csvModules[k as keyof typeof csvModules] ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600' : 'bg-transparent border-slate-200 dark:border-slate-700 opacity-50'}`}>
+                         <p className="text-[9px] font-black uppercase">{k}</p>
+                      </div>
+                   ))}
+                </div>
+
+                <button onClick={handleBulkCSVExport} className="w-full py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 dark:hover:bg-slate-600 transition">
+                  Export Selected CSVs
                 </button>
               </div>
 
             </div>
           ) : (
-            <div className="space-y-6 animate-in slide-in-from-right-4">
-              {!previewData ? (
-                <>
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-4 border-dashed border-slate-300 dark:border-slate-700 rounded-[2.5rem] p-10 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all group"
-                  >
-                    <span className="text-4xl block mb-4 group-hover:scale-110 transition-transform">📂</span>
-                    <p className="text-sm font-black text-slate-500">Restore from JSON Archive</p>
-                    <p className="text-[10px] text-slate-400 mt-2">Full system restore</p>
-                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".json" />
+            <div className="space-y-6 animate-in slide-in-from-right-4 h-full flex flex-col">
+              
+              {!restoreData ? (
+                <div 
+                  onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`flex-1 border-4 border-dashed rounded-[2.5rem] flex flex-col items-center justify-center text-center p-8 transition-all cursor-pointer group ${dragActive ? 'border-primary bg-primary/5 scale-[1.02]' : 'border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                >
+                  <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-4xl mb-4 group-hover:scale-110 transition shadow-sm">
+                    📂
                   </div>
-
-                  <div className="h-px bg-slate-200 dark:bg-white/10 w-full"></div>
-
-                  <div className="space-y-3">
-                     <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest px-2">CSV Import Recovery</h4>
-                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <button 
-                          onClick={() => triggerCSVImport('inventory')}
-                          className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl text-left hover:border-primary transition group"
-                        >
-                           <span className="text-2xl block mb-1">📦</span>
-                           <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 group-hover:text-primary">Recover Inventory</span>
-                        </button>
-                        <button 
-                          onClick={() => triggerCSVImport('customers')}
-                          className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl text-left hover:border-indigo-500 transition group"
-                        >
-                           <span className="text-2xl block mb-1">👥</span>
-                           <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 group-hover:text-indigo-500">Recover Members</span>
-                        </button>
-                        <button 
-                          onClick={() => triggerCSVImport('records')}
-                          className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl text-left hover:border-amber-500 transition group"
-                        >
-                           <span className="text-2xl block mb-1">📄</span>
-                           <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 group-hover:text-amber-500">Recover Sales/Debt</span>
-                        </button>
-                     </div>
-                     <p className="text-[9px] text-slate-400 px-2 leading-relaxed">
-                        Note: CSV Import will merge new items into your existing data. It does not replace the full database.
-                     </p>
-                     <input type="file" ref={csvInputRef} onChange={handleCSVSelect} className="hidden" accept=".csv" />
-                  </div>
-                </>
+                  <h4 className="text-sm font-black text-slate-700 dark:text-white uppercase mb-1">Drag & Drop File</h4>
+                  <p className="text-[10px] text-slate-400 font-medium">Supports .JSON Archive or .CSV Spreadsheet</p>
+                  <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".json,.csv" />
+                </div>
               ) : (
-                <div className="space-y-6">
-                    <>
-                      <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-white/5 space-y-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center font-black text-lg">✓</div>
-                          <div>
-                            <h4 className="font-black text-sm dark:text-white">Backup Verified</h4>
-                            <p className="text-[10px] text-slate-400">Created: {new Date(previewData.metadata.date).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-center">
-                            <span className="block font-black text-lg dark:text-white">{previewData.data.inventory?.length || 0}</span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">Products</span>
-                          </div>
-                          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-center">
-                            <span className="block font-black text-lg dark:text-white">{previewData.data.customers?.length || 0}</span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">Customers</span>
-                          </div>
-                          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-center">
-                            <span className="block font-black text-lg dark:text-white">{previewData.data.records?.length || 0}</span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">Records</span>
-                          </div>
-                        </div>
+                <div className="flex-1 flex flex-col">
+                   <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-white/5 mb-6 shadow-sm">
+                      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
+                         <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center font-black text-lg">
+                           {restoreStats?.type === 'JSON' ? '📦' : '📄'}
+                         </div>
+                         <div>
+                            <h4 className="font-black text-sm dark:text-white uppercase">{restoreStats?.type} Data Analysis</h4>
+                            <p className="text-[10px] text-slate-400">Ready to merge</p>
+                         </div>
                       </div>
-
-                      <div className="flex p-1.5 bg-slate-200 dark:bg-slate-800 rounded-2xl">
-                        <button 
-                          onClick={() => setRestoreMode('merge')} 
-                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${restoreMode === 'merge' ? 'bg-white dark:bg-slate-700 shadow-sm dark:text-white' : 'text-slate-500'}`}
-                        >
-                          Merge Data
-                        </button>
-                        <button 
-                          onClick={() => setRestoreMode('replace')} 
-                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${restoreMode === 'replace' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-500'}`}
-                        >
-                          Replace All
-                        </button>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                         <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl text-center">
+                            <span className="block font-black text-2xl text-emerald-500">{restoreStats?.newCount}</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">New Items</span>
+                         </div>
+                         <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-center">
+                            <span className="block font-black text-2xl text-amber-500">{restoreStats?.updateCount}</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">To Update</span>
+                         </div>
                       </div>
+                   </div>
 
-                      <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-800/30">
-                        <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium leading-relaxed">
-                          {restoreMode === 'merge' 
-                            ? "Merge will add new items and customers. Existing items with same Barcode/ID will be updated."
-                            : "⚠️ Warning: Replace will permanently delete all current data on this device and load the backup."}
-                        </p>
+                   <div className="mt-auto space-y-3">
+                      <div className="flex p-1 bg-slate-200 dark:bg-slate-800 rounded-xl">
+                        <button onClick={() => setRestoreMode('merge')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${restoreMode === 'merge' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}>Merge</button>
+                        <button onClick={() => setRestoreMode('replace')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${restoreMode === 'replace' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-500'}`}>Replace All</button>
                       </div>
-
+                      
                       <div className="flex gap-3">
-                        <button onClick={() => { setPreviewData(null); setRestoreFile(null); }} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black uppercase text-xs tracking-widest">Cancel</button>
-                        <button onClick={executeRestore} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">Confirm Restore</button>
+                         <button onClick={() => setRestoreData(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black uppercase text-xs">Cancel</button>
+                         <button onClick={executeRestore} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:scale-[1.02] transition">Confirm Restore</button>
                       </div>
-                    </>
+                   </div>
                 </div>
               )}
+
             </div>
           )}
         </div>

@@ -44,8 +44,14 @@ export interface AuthConfig {
   cashierPin: string;
 }
 
+export interface QuickPickItem {
+  name: string;
+  price: number;
+}
+
 export interface AppSettings {
   categories: string[];
+  quickPicks: QuickPickItem[];
   expiryThresholdDays: number;
   lowStockThreshold: number;
   language: AppLanguage;
@@ -100,6 +106,8 @@ export interface UtangItem {
   name: string;
   quantity: number;
   price: number;
+  cost?: number; // Added for profit tracking on manual items
+  itemsPerPack?: number; // Added for pack tracking on manual items
   volume?: string;
   unit?: MeasurementUnit;
   measurementValue?: number;

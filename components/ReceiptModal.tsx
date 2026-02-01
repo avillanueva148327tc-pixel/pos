@@ -360,7 +360,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
              </div>
 
              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar pb-32 md:pb-8">
-                
+                {/* ... (Existing Settings UI Code) ... */}
                 {/* Branding Section */}
                 <section className="space-y-4">
                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Branding & Identity</h4>

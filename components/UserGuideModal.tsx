@@ -24,7 +24,7 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
         {/* Sidebar / Tabs */}
         <div className="w-full md:w-64 bg-slate-50 dark:bg-[#0f172a] p-6 border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 flex flex-col">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">User Guide</h2>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">System Manual v3.5</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">System Manual v3.6</p>
           
           <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-2 md:pb-0">
             {tabs.map(tab => (
@@ -93,8 +93,12 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                     <div>
                       <h4 className="font-bold dark:text-white">Adding Items</h4>
                       <p className="text-sm text-slate-500 mt-1">
-                        Go to the <b>New Transaction</b> (Terminal) button. Click products from the list, type to search, or click the Camera icon to scan barcodes.
+                        Go to <b>New Transaction</b>.
                       </p>
+                      <ul className="list-disc pl-4 text-xs text-slate-500 mt-2 space-y-1">
+                        <li><b>Scan / Inventory:</b> Search your registered products or use the Camera Scanner.</li>
+                        <li><b>Manual Entry:</b> Switch to this tab to quickly type a name and price for items not in your inventory (e.g., "Ice", "Service Fee").</li>
+                      </ul>
                     </div>
                   </div>
 
@@ -231,9 +235,8 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                          <h4 className="font-bold text-sm dark:text-white">Backup & Restore</h4>
                       </div>
                       <p className="text-xs text-slate-500 ml-8 leading-relaxed">
-                         <b>JSON Archive:</b> Creates a full copy of your entire system. Use this for safe keeping.<br/>
-                         <b>CSV Export:</b> Downloads spreadsheets compatible with Excel/Google Sheets for manual reporting.<br/>
-                         <b>Restore:</b> Load a previous backup file to recover data.
+                         <b>Archive:</b> Download your full data as a JSON file.<br/>
+                         <b>Import:</b> Drag and drop your JSON or CSV file to restore. The system now provides a <b>Preview</b> showing new vs updated items before you confirm.
                       </p>
                    </div>
 
@@ -256,7 +259,9 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                       </div>
                       <p className="text-xs text-slate-500 ml-8 leading-relaxed">
                          Connect a <b>Bluetooth</b> or <b>USB Thermal Printer</b> for physical receipts.
-                         Customize the receipt layout (Logo, Address, Footer) in the "Settings" tab > "Receipt Template".
+                         Customize the receipt layout in "Settings" > "Receipt Template".
+                         <br/><br/>
+                         <b>Windows USB Issues?</b> If you see "Driver Conflict", follow the on-screen link to download <b>Zadig</b> and replace the driver with <b>WinUSB</b>.
                       </p>
                    </div>
                 </div>

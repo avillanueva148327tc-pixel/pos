@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  InventoryItem, Customer, UtangRecord, BatchRecord, AppSettings, BranchConfig, UserRole, Stats as StatsType, UtangItem 
+  InventoryItem, Customer, UtangRecord, BatchRecord, AppSettings, BranchConfig, UserRole, Stats as StatsType, UtangItem, QuickPickItem 
 } from './types';
 import LoginScreen from './components/LoginScreen';
 // Stats import is now used inside FinancialPulseModal, but we calculate stats here.
@@ -34,7 +34,6 @@ import { translations } from './translations';
 import { SecurityService } from './services/securityService';
 import { TransactionService } from './services/transactionService';
 
-// ... (Constants remain the same)
 const DEFAULT_BRANCH: BranchConfig = {
   name: "My Sari-Sari Store",
   address: "Barangay Hall St.",
@@ -44,6 +43,11 @@ const DEFAULT_BRANCH: BranchConfig = {
 
 const DEFAULT_SETTINGS: AppSettings = {
   categories: ["Canned Goods", "Beverages", "Snacks", "Condiments", "Toiletries", "Others"],
+  quickPicks: [
+    { name: 'Ice Tubig', price: 3 },
+    { name: 'Ice Candy', price: 5 },
+    { name: 'Yosi', price: 10 }
+  ],
   expiryThresholdDays: 30,
   lowStockThreshold: 5,
   language: 'en',
@@ -116,7 +120,9 @@ export default function App() {
   const [showExpiryAlert, setShowExpiryAlert] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock'>('all'); // New Filter State
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock'>('all'); 
+  const [inventorySort, setInventorySort] = useState<'name' | 'stock-asc' | 'stock-desc' | 'price-asc' | 'price-desc'>('name');
+  const [debtTabFilter, setDebtTabFilter] = useState<'registered' | 'walkin'>('registered'); 
   
   // Pagination State for Performance
   const [visibleItemsCount, setVisibleItemsCount] = useState(20);
@@ -217,7 +223,7 @@ export default function App() {
   // Reset pagination when search changes
   useEffect(() => {
     setVisibleItemsCount(20);
-  }, [searchTerm, selectedCategory, inventoryFilter]);
+  }, [searchTerm, selectedCategory, inventoryFilter, inventorySort]);
 
   // --- COMPUTED ---
   const t = translations[settings.language] || translations.en;
@@ -234,6 +240,10 @@ export default function App() {
     });
   }, [inventory, settings.expiryThresholdDays]);
 
+  const lowStockItems = useMemo(() => {
+    return inventory.filter(i => i.stock <= i.reorderLevel);
+  }, [inventory]);
+
   const stats: StatsType = useMemo(() => {
     const totalCount = records.length;
     const totalAmount = records.reduce((sum, r) => sum + r.totalAmount, 0);
@@ -241,7 +251,7 @@ export default function App() {
     const unpaidTotal = totalAmount - paidTotal;
     const activeDebtors = new Set(records.filter(r => !r.isPaid).map(r => r.customerName)).size;
     
-    const lowStockCount = inventory.filter(i => i.stock <= i.reorderLevel).length;
+    const lowStockCount = lowStockItems.length;
     const totalInventoryValue = inventory.reduce((sum, i) => sum + (i.stock * i.price), 0);
     const totalInvestmentValue = inventory.reduce((sum, i) => sum + (i.stock * (i.originalPrice || 0)), 0);
     
@@ -270,13 +280,23 @@ export default function App() {
        dailySales, monthlySales, monthlyExpenses, 
        monthlyNetProfit: monthlySales - monthlyExpenses
     };
-  }, [records, inventory, batches]);
+  }, [records, inventory, batches, lowStockItems]);
 
   // Goal Progress
   const goalProgress = useMemo(() => {
     if (!settings.dailySalesTarget) return 0;
     return Math.min(100, (stats.dailySales / settings.dailySalesTarget) * 100);
   }, [stats.dailySales, settings.dailySalesTarget]);
+
+  // Debt Aging Logic
+  const getDebtAgeDays = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 0;
+    const now = new Date();
+    return Math.floor((now.getTime() - d.getTime()) / (1000 * 3600 * 24));
+  };
+
+  const notificationCount = stats.lowStockCount + expiringItems.length;
 
   // --- HANDLERS ---
   const handleLogin = async (pin: string) => {
@@ -462,6 +482,7 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
   
+  // Inventory Filtering & Sorting
   const filteredInventory = inventory.filter(i => {
     // 1. Category Filter
     if (selectedCategory !== 'All' && i.category !== selectedCategory) return false;
@@ -479,7 +500,18 @@ export default function App() {
            (i.barcode && i.barcode.includes(lowerSearch));
   });
 
-  const displayedInventory = filteredInventory.slice(0, visibleItemsCount);
+  const sortedInventory = [...filteredInventory].sort((a, b) => {
+      switch (inventorySort) {
+          case 'name': return a.name.localeCompare(b.name);
+          case 'stock-asc': return a.stock - b.stock;
+          case 'stock-desc': return b.stock - a.stock;
+          case 'price-asc': return a.price - b.price;
+          case 'price-desc': return b.price - a.price;
+          default: return 0;
+      }
+  });
+
+  const displayedInventory = sortedInventory.slice(0, visibleItemsCount);
 
   // Device Mode Logic
   const deviceMode = settings.uiCustomization.deviceMode || 'desktop';
@@ -504,6 +536,20 @@ export default function App() {
            
            <div className="flex items-center gap-2">
               <button onClick={() => setShowScanner(true)} className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-[#6366f1] transition shadow-sm text-xl" title="Scan ID or Item">📷</button>
+              
+              <button 
+                onClick={() => setShowExpiryAlert(!showExpiryAlert)} 
+                className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-amber-500 transition shadow-sm text-xl relative"
+                title="Notifications"
+              >
+                🔔
+                {notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[9px] font-black flex items-center justify-center rounded-full border-2 border-white dark:border-[#0f172a]">
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </span>
+                )}
+              </button>
+
               <span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-white/10 px-3 py-1.5 rounded-lg text-slate-500 dark:text-slate-300">{currentUserRole}</span>
               <button onClick={() => setShowUserGuide(true)} className="w-10 h-10 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 flex items-center justify-center">❓</button>
               <button onClick={handleLogout} className="w-10 h-10 rounded-xl hover:bg-rose-500/10 hover:text-rose-500 flex items-center justify-center transition">🚪</button>
@@ -516,8 +562,9 @@ export default function App() {
           {showExpiryAlert && (
               <ExpiryAlertBanner 
                 expiringItems={expiringItems} 
+                lowStockItems={lowStockItems}
                 threshold={settings.expiryThresholdDays} 
-                onViewDetails={() => setActiveTab('inventory')}
+                onViewDetails={() => { setActiveTab('inventory'); setInventoryFilter('all'); }}
                 onDismiss={() => setShowExpiryAlert(false)} 
               />
           )}
@@ -535,9 +582,10 @@ export default function App() {
              ))}
           </div>
 
-          {/* ... (DASHBOARD, INVENTORY, DEBT, CUSTOMERS, INSIGHTS tabs are mostly unchanged) ... */}
+          {/* ... (DASHBOARD) ... */}
           {activeTab === 'dashboard' && (
              <div className="animate-in fade-in duration-500 space-y-6">
+                {/* ... existing dashboard content ... */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-2 px-1">
                    <div>
                       <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">Dashboard</h2>
@@ -623,22 +671,42 @@ export default function App() {
              </div>
           )}
 
+          {/* ... (INVENTORY) ... */}
           {activeTab === 'inventory' && (
              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-                {/* ... (Inventory UI logic same as before) ... */}
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-                    <button onClick={() => { setSelectedCategory('All'); setInventoryFilter('all'); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === 'All' && inventoryFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>All Items</button>
-                    
-                    <button 
-                      onClick={() => setInventoryFilter(inventoryFilter === 'low-stock' ? 'all' : 'low-stock')} 
-                      className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${inventoryFilter === 'low-stock' ? 'bg-rose-500 text-white border-transparent shadow-lg shadow-rose-500/30' : 'bg-white dark:bg-[#1e293b] text-rose-500 border-rose-200 dark:border-rose-900/30 hover:bg-rose-50'}`}
-                    >
-                      ⚠️ Low Stock Only
-                    </button>
+                
+                {/* 1. Category and Low Stock Filters */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                   <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0 w-full md:w-auto">
+                      <button onClick={() => { setSelectedCategory('All'); setInventoryFilter('all'); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === 'All' && inventoryFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>All Items</button>
+                      
+                      <button 
+                        onClick={() => setInventoryFilter(inventoryFilter === 'low-stock' ? 'all' : 'low-stock')} 
+                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${inventoryFilter === 'low-stock' ? 'bg-rose-500 text-white border-transparent shadow-lg shadow-rose-500/30' : 'bg-white dark:bg-[#1e293b] text-rose-500 border-rose-200 dark:border-rose-900/30 hover:bg-rose-50'}`}
+                      >
+                        ⚠️ Low Stock Only
+                      </button>
 
-                    {settings.categories.map(cat => (
-                      <button key={cat} onClick={() => { setSelectedCategory(cat); setInventoryFilter('all'); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === cat && inventoryFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>{cat}</button>
-                    ))}
+                      {settings.categories.map(cat => (
+                        <button key={cat} onClick={() => { setSelectedCategory(cat); setInventoryFilter('all'); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${selectedCategory === cat && inventoryFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg' : 'bg-white dark:bg-[#1e293b] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300'}`}>{cat}</button>
+                      ))}
+                   </div>
+
+                   {/* 2. Sorting Control */}
+                   <div className="flex items-center gap-2 bg-white dark:bg-[#1e293b] p-1.5 rounded-xl border border-slate-200 dark:border-white/5 shrink-0">
+                      <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase pl-2 tracking-wider">Sort:</span>
+                      <select 
+                        value={inventorySort} 
+                        onChange={(e) => setInventorySort(e.target.value as any)}
+                        className="bg-transparent text-xs font-bold text-slate-700 dark:text-white outline-none cursor-pointer pr-2"
+                      >
+                        <option value="name" className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white">Name (A-Z)</option>
+                        <option value="stock-asc" className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white">Stock (Low → High)</option>
+                        <option value="stock-desc" className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white">Stock (High → Low)</option>
+                        <option value="price-desc" className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white">Price (High → Low)</option>
+                        <option value="price-asc" className="bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white">Price (Low → High)</option>
+                      </select>
+                   </div>
                 </div>
 
                 <div className="flex gap-2 mb-4">
@@ -714,23 +782,82 @@ export default function App() {
           )}
 
           {activeTab === 'debt' && (
-             <div className={`grid gap-4 ${deviceMode === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
-                {records.map(record => (
-                   <div key={record.id} onClick={() => setShowRecordDetails(record)} className="bg-white dark:bg-[#1e293b] p-5 rounded-3xl border border-slate-200 dark:border-white/5 hover:shadow-lg transition cursor-pointer">
-                      <div className="flex justify-between items-start mb-4">
-                         <div>
-                            <p className="font-black text-sm uppercase dark:text-white">{record.customerName}</p>
-                            <p className="text-[10px] text-slate-400">{record.date}</p>
-                         </div>
-                         <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${record.isPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{record.isPaid ? 'PAID' : 'UNPAID'}</span>
-                      </div>
-                      <div className="flex justify-between items-end">
-                         <p className="text-[10px] font-bold text-slate-500 uppercase">{record.quantity} Items</p>
-                         <p className="text-xl font-black dark:text-white">₱{record.totalAmount.toFixed(2)}</p>
-                      </div>
+             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Toggle for Debt vs Sales */}
+                <div className="flex justify-center">
+                   <div className="flex p-1 bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-white/5 w-full max-w-md shadow-sm">
+                      <button 
+                        onClick={() => setDebtTabFilter('registered')} 
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${debtTabFilter === 'registered' ? 'bg-[#6366f1] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                      >
+                        👥 Registered Suki
+                      </button>
+                      <button 
+                        onClick={() => setDebtTabFilter('walkin')} 
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${debtTabFilter === 'walkin' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                      >
+                        🚶 Walk-in Sales
+                      </button>
                    </div>
-                ))}
-                {records.length === 0 && <div className="col-span-full text-center py-20 text-slate-400">No records found.</div>}
+                </div>
+
+                <div className={`grid gap-4 ${deviceMode === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+                    {records
+                      .filter(r => {
+                          const isWalkIn = r.customerName === 'Walk-in Customer';
+                          return debtTabFilter === 'walkin' ? isWalkIn : !isWalkIn;
+                      })
+                      .map(record => {
+                        const daysOld = getDebtAgeDays(record.date);
+                        let ageIndicatorColor = 'bg-white/5';
+                        let ageLabel = 'New';
+                        let borderClass = 'border-slate-200 dark:border-white/5';
+
+                        if (!record.isPaid) {
+                           if (daysOld > 30) {
+                              ageIndicatorColor = 'bg-rose-500 text-white';
+                              ageLabel = '> 30 Days';
+                              borderClass = 'border-rose-500 ring-1 ring-rose-500/30';
+                           } else if (daysOld > 7) {
+                              ageIndicatorColor = 'bg-amber-500 text-white';
+                              ageLabel = '> 7 Days';
+                              borderClass = 'border-amber-500';
+                           } else {
+                              ageIndicatorColor = 'bg-emerald-500 text-white';
+                              ageLabel = 'Recent';
+                              borderClass = 'border-emerald-500';
+                           }
+                        }
+
+                        return (
+                        <div key={record.id} onClick={() => setShowRecordDetails(record)} className={`bg-white dark:bg-[#1e293b] p-5 rounded-3xl border transition cursor-pointer relative overflow-hidden group hover:shadow-xl ${borderClass}`}>
+                            <div className="flex justify-between items-start mb-4 pl-1">
+                              <div>
+                                  <p className="font-black text-sm uppercase dark:text-white truncate max-w-[150px]">{record.customerName}</p>
+                                  <p className="text-[10px] text-slate-400">{record.date}</p>
+                              </div>
+                              <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${record.isPaid ? 'bg-slate-100 text-slate-500' : ageIndicatorColor}`}>
+                                 {record.isPaid ? 'PAID' : ageLabel}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-end pl-1">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">{record.quantity} Items</p>
+                              <div className="text-right">
+                                <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Total</p>
+                                <p className="text-xl font-black dark:text-white">₱{record.totalAmount.toFixed(2)}</p>
+                              </div>
+                            </div>
+                        </div>
+                        );
+                      })}
+                    
+                    {records.filter(r => debtTabFilter === 'walkin' ? r.customerName === 'Walk-in Customer' : r.customerName !== 'Walk-in Customer').length === 0 && (
+                        <div className="col-span-full text-center py-20 opacity-50">
+                            <span className="text-4xl block mb-2">{debtTabFilter === 'walkin' ? '🚶' : '👥'}</span>
+                            <p className="text-xs font-bold text-slate-500 uppercase">No {debtTabFilter === 'walkin' ? 'walk-in' : 'registered'} records found.</p>
+                        </div>
+                    )}
+                </div>
              </div>
           )}
 
@@ -781,6 +908,7 @@ export default function App() {
 
           {activeTab === 'settings' && (
              <div className="max-w-3xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+                 {/* ... (Existing settings content) ... */}
                  
                  <div className="bg-white dark:bg-[#1e293b] p-6 rounded-3xl border border-slate-200 dark:border-white/5 shadow-sm">
                     <h3 className="font-black text-lg mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><span className="text-xl">🏪</span> Store Profile</h3>
@@ -929,8 +1057,18 @@ export default function App() {
           inventory={inventory} customers={customers} records={records} receiptTemplate={settings.receiptTemplate} branch={branch}
           adminPinHash={adminPinHash} requireAdminApproval={settings.requireAdminApproval} defaultAutoPrint={settings.autoPrintReceipt}
           initialCustomer={posInitialCustomer} initialItem={posInitialItem}
+          quickPicks={settings.quickPicks} onUpdateQuickPicks={(picks) => setSettings({...settings, quickPicks: picks})}
           onAdd={handleAddDebt} onClose={() => { setShowDebtModal(false); setPosInitialCustomer(null); setPosInitialItem(null); }}
-          onAddNewInventory={(code) => { setShowDebtModal(false); setEditingItem({ barcode: code } as any); setShowAddInventory({ isOpen: true, initialBarcode: code }); }}
+          onAddNewInventory={(details) => { 
+             setShowDebtModal(false); 
+             if (typeof details === 'string') {
+                setEditingItem({ barcode: details } as any); 
+                setShowAddInventory({ isOpen: true, initialBarcode: details }); 
+             } else {
+                setEditingItem(details as any);
+                setShowAddInventory({ isOpen: true });
+             }
+          }}
           onRegisterCustomer={(name) => { setShowDebtModal(false); setPrefilledCustomerName(name); setShowAddCustomer(true); }}
         />
       )}
@@ -951,6 +1089,8 @@ export default function App() {
         />
       )}
 
+      {/* ... (Other modals remain the same) ... */}
+      
       {showBatchModal && (
          <AddBatchModal 
            inventory={inventory} onAddBatch={handleAddBatch} onClose={() => setShowBatchModal(false)} userRole={currentUserRole}
