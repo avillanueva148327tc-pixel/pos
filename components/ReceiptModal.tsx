@@ -45,16 +45,19 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
   }, []);
 
   useEffect(() => {
+    let timer: any;
     if (autoPrint && !isPreview) {
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         if (PrinterService.isConnected() && isThermal) {
           handleHardwarePrint();
         } else {
           window.print();
         }
       }, 500);
-      return () => clearTimeout(timer);
     }
+    return () => {
+        if (timer) clearTimeout(timer);
+    };
   }, [autoPrint, isPreview, isThermal]);
 
   const handlePrint = () => {
@@ -179,7 +182,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
             <img 
               src={receiptTemplate.logoUrl || branch.logoUrl} 
               alt="Store Logo" 
-              className={`object-contain mb-2 ${headerAlignClass === 'text-center' ? 'mx-auto' : ''} rounded-xl ${isCompact ? 'h-8 w-auto max-w-[80px]' : 'h-24 w-auto max-w-[200px]'}`} 
+              className={`object-contain mb-2 ${headerAlignClass === 'text-center' ? 'mx-auto' : 'ml-0'} rounded-xl ${isCompact ? 'h-8 w-auto max-w-[80px]' : 'h-24 w-auto max-w-[200px]'}`} 
             />
           )}
           
@@ -324,23 +327,17 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
           <button onClick={onClose} className="absolute top-6 right-6 z-50 w-12 h-12 rounded-full bg-white/10 text-white hover:bg-rose-500 hover:text-white flex items-center justify-center transition hidden md:flex text-xl font-bold">✕</button>
 
           {/* Left Pane: Preview */}
-          {/* On mobile, this div is hidden if activeTab is 'style' */}
           <div 
             className={`flex-1 bg-[#111827] flex items-center justify-center p-4 md:p-12 overflow-y-auto overflow-x-hidden relative transition-all duration-300 ${activeTab === 'style' ? 'hidden md:flex' : 'flex'}`}
           >
             <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }}></div>
             
-            <div className="mt-20 md:mt-0 pb-32 md:pb-0 flex flex-col items-center justify-start md:justify-center min-h-0 w-full">
-               {/* 
-                  Responsive Scale Logic:
-                  - Mobile: Shrink significantly for large formats (A4/Letter) or slightly for Thermal.
-                  - Desktop (md): Show close to normal size or slight shrink.
-               */}
+            <div className="mt-16 md:mt-0 pb-32 md:pb-0 flex flex-col items-center justify-start md:justify-center min-h-0 w-full">
                <div 
                  className="transition-transform duration-300 origin-top md:origin-center"
                  style={{ 
                    transform: windowWidth < 768 
-                     ? (isLargeFormat ? 'scale(0.35)' : 'scale(0.85)') // Mobile Scaling
+                     ? (isLargeFormat ? 'scale(0.35)' : 'scale(0.8)') // Mobile Scaling
                      : (isLargeFormat ? 'scale(0.55)' : 'scale(1)') // Desktop Scaling
                  }}
                >
@@ -350,7 +347,6 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </div>
 
           {/* Right Pane: Settings */}
-          {/* On mobile, this div is hidden if activeTab is 'preview' */}
           <div 
             className={`w-full md:w-[420px] bg-[#0f172a] border-l border-white/5 flex flex-col h-full ${activeTab === 'preview' ? 'hidden md:flex' : 'flex'}`}
           >
@@ -360,7 +356,6 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
              </div>
 
              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar pb-32 md:pb-8">
-                {/* ... (Existing Settings UI Code) ... */}
                 {/* Branding Section */}
                 <section className="space-y-4">
                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Branding & Identity</h4>
@@ -468,183 +463,111 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                         <select 
                             value={receiptTemplate.fontFamily} 
                             onChange={e => onUpdateSettings?.('fontFamily', e.target.value)} 
-                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer"
                         >
                             <option value="Inter">Inter (Clean)</option>
-                            <option value="JetBrains Mono">JetBrains Mono (Code)</option>
-                            <option value="Courier New">Courier New (Retro)</option>
-                            <option value="Roboto">Roboto (Standard)</option>
+                            <option value="JetBrains Mono">JetBrains (Code)</option>
+                            <option value="Courier New">Courier (Retro)</option>
+                            <option value="Roboto">Roboto (Android)</option>
                             <option value="Poppins">Poppins (Modern)</option>
                         </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">▼</div>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">▼</div>
                      </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                      <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Paper Size</label>
-                        <div className="relative">
-                            <select 
+                        <select 
                             value={receiptTemplate.paperWidth} 
                             onChange={e => onUpdateSettings?.('paperWidth', e.target.value)} 
-                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
-                            >
-                            <optgroup label="Thermal">
-                                <option value="58mm">58mm</option>
-                                <option value="80mm">80mm</option>
-                            </optgroup>
-                            <optgroup label="Standard">
-                                <option value="A4-6">A4 (Grid)</option>
-                                <option value="A4">A4 Full</option>
-                                <option value="Letter">Letter</option>
-                            </optgroup>
-                            </select>
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">▼</div>
-                        </div>
+                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-3 py-3 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50"
+                        >
+                            <option value="58mm">58mm Thermal</option>
+                            <option value="80mm">80mm Thermal</option>
+                            <option value="A4">A4 (Full Page)</option>
+                            <option value="Letter">Letter (US)</option>
+                            <option value="A4-6">A4 (1/6th)</option>
+                        </select>
                      </div>
                      <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Base Size</label>
-                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[46px]">
-                           <button onClick={() => onUpdateSettings?.('fontSize', Math.max(10, fontSize - 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">-</button>
-                           <span className="flex-1 text-center text-xs font-bold text-white">{fontSize}px</span>
-                           <button onClick={() => onUpdateSettings?.('fontSize', Math.min(20, fontSize + 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">+</button>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* New Font Size Controls */}
-                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Header Size</label>
-                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[46px]">
-                           <button onClick={() => onUpdateSettings?.('headerFontSize', Math.max(12, headerFontSize - 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">-</button>
-                           <span className="flex-1 text-center text-xs font-bold text-white">{headerFontSize}px</span>
-                           <button onClick={() => onUpdateSettings?.('headerFontSize', Math.min(32, headerFontSize + 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">+</button>
-                        </div>
-                     </div>
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Item Size</label>
-                        <div className="flex items-center gap-2 bg-[#1e293b] border border-slate-700 rounded-xl px-2 h-[46px]">
-                           <button onClick={() => onUpdateSettings?.('itemFontSize', Math.max(8, itemFontSize - 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">-</button>
-                           <span className="flex-1 text-center text-xs font-bold text-white">{itemFontSize}px</span>
-                           <button onClick={() => onUpdateSettings?.('itemFontSize', Math.min(18, itemFontSize + 1))} className="w-8 h-full text-slate-400 hover:text-white font-black text-lg">+</button>
-                        </div>
+                        <input 
+                            type="number"
+                            value={receiptTemplate.fontSize} 
+                            onChange={e => onUpdateSettings?.('fontSize', parseInt(e.target.value))} 
+                            className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-3 py-3 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50"
+                        />
                      </div>
                   </div>
                 </section>
 
                 {/* Toggles */}
-                <section className="space-y-3">
-                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Display Options</h4>
+                <section className="space-y-4 pt-2">
+                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Visible Elements</h4>
                    {[
-                     { k: 'showBranchAddress', label: 'Show Store Address' },
-                     { k: 'showBranchContact', label: 'Show Contact Info' },
-                     { k: 'showDateTime', label: 'Show Date & Time' },
+                     { k: 'showBranchAddress', label: 'Show Address' },
+                     { k: 'showBranchContact', label: 'Show Contact' },
                      { k: 'showCustomerId', label: 'Show Customer ID' },
+                     { k: 'showItemSize', label: 'Show Item Units' },
+                     { k: 'showDateTime', label: 'Show Date & Time' }
                    ].map(opt => (
-                     <div key={opt.k} className="flex justify-between items-center p-3 bg-[#1e293b] rounded-xl border border-slate-700">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">{opt.label}</span>
-                        <div 
-                          onClick={() => onUpdateSettings?.(opt.k as keyof ReceiptTemplate, !receiptTemplate[opt.k as keyof ReceiptTemplate])}
-                          className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${receiptTemplate[opt.k as keyof ReceiptTemplate] ? 'bg-[#6366f1]' : 'bg-slate-700'}`}
-                        >
-                           <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${receiptTemplate[opt.k as keyof ReceiptTemplate] ? 'translate-x-4' : ''}`} />
-                        </div>
-                     </div>
+                      <div key={opt.k} className="flex items-center justify-between p-3 bg-[#1e293b] rounded-xl border border-slate-700">
+                         <span className="text-xs font-bold text-white">{opt.label}</span>
+                         <div 
+                           onClick={() => onUpdateSettings?.(opt.k as keyof ReceiptTemplate, !receiptTemplate[opt.k as keyof ReceiptTemplate])} 
+                           className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${receiptTemplate[opt.k as keyof ReceiptTemplate] ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                         >
+                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${receiptTemplate[opt.k as keyof ReceiptTemplate] ? 'translate-x-4' : ''}`} />
+                         </div>
+                      </div>
                    ))}
                 </section>
-                
-                {/* Save Button (Inside Scroll) */}
-                <button onClick={onClose} className="w-full py-4 bg-[#6366f1] text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-500/20 hover:bg-indigo-500 transition active:scale-95 mb-4">
-                  Done & Save
-                </button>
              </div>
           </div>
 
-          {/* Mobile Tab Bar - Fixed at bottom outside the conditional panes so it persists */}
-          <div className="md:hidden flex p-2 bg-[#020617] border-t border-white/10 fixed bottom-0 left-0 right-0 z-[60]">
-            <button onClick={() => setActiveTab('preview')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'preview' ? 'bg-white text-slate-900' : 'text-slate-500 hover:text-slate-300'}`}>Preview</button>
-            <button onClick={() => setActiveTab('style')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'style' ? 'bg-white text-slate-900' : 'text-slate-500 hover:text-slate-300'}`}>Styles</button>
+          {/* Mobile Bottom Navigation */}
+          <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 flex gap-2 bg-[#0f172a]/90 backdrop-blur-md p-1.5 rounded-full border border-white/10 shadow-2xl z-[60]">
+             <button 
+               onClick={() => setActiveTab('preview')}
+               className={`px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'preview' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+             >
+               Preview
+             </button>
+             <button 
+               onClick={() => setActiveTab('style')}
+               className={`px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'style' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+             >
+               Styles
+             </button>
           </div>
+
         </div>
       </div>
     );
   }
 
-  // DEFAULT (NON-PREVIEW) RENDER (THE ACTUAL PRINT VIEW)
+  // STANDARD MODAL RENDER (Not Preview)
   return (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-in fade-in duration-300 overflow-y-auto">
-      <div className="w-full flex flex-col items-center gap-6 py-12">
+    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-in fade-in">
+      <div className="w-full max-w-sm flex flex-col gap-6 items-center">
         
-        {/* If A4-6 Layout is selected, render 6 copies in a grid for printing */}
-        {isA4SixUp ? (
-          <div className="bg-white p-0 grid grid-cols-2 grid-rows-3 print-grid" style={{ width: '210mm', height: '297mm', alignContent: 'start', justifyContent: 'center' }}>
-             {[...Array(6)].map((_, i) => (
-                <div key={i} className="flex items-center justify-center p-1 border-r border-b border-dashed border-slate-200">
-                   <ReceiptContent isCopy={true} refProp={i === 0 ? receiptRef : null} />
-                </div>
-             ))}
-          </div>
-        ) : (
-          // Normal Single Receipt
-          <ReceiptContent refProp={receiptRef} />
-        )}
+        <div className="w-full relative shadow-2xl animate-in zoom-in duration-300">
+           <ReceiptContent />
+        </div>
 
-        <div className="flex flex-col gap-4 w-full max-w-xs px-4 pb-10 no-print">
-          
-          {/* Smart Button: Show Hardware Print only for Thermal Sizes */}
-          {isThermal && PrinterService.isConnected() && (
-            <button 
-              onClick={handleHardwarePrint} 
-              disabled={isPrinting} 
-              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"
-            >
-              {isPrinting ? 'SENDING DATA...' : `⚡ ${PrinterService.getConnectionType().toUpperCase()} PRINT`}
-            </button>
-          )}
-
-          {/* OS Print - Better for A4/Letter or if no hardware connected */}
-          <button onClick={handlePrint} className="py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">
-            🖨️ {isThermal && PrinterService.isConnected() ? 'System Print' : 'Print Now'}
-          </button>
-
-          <div className="grid grid-cols-1 gap-3">
-            <button onClick={handleSaveToGallery} disabled={isSaving} className="py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">
-              {isSaving ? 'Saving...' : '💾 Save as Image'}
-            </button>
-          </div>
-          <button onClick={onClose} className="py-4 bg-white/10 text-white border border-white/20 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-white/20 transition-all">
-            Close Terminal
-          </button>
+        <div className="flex gap-2 w-full">
+           <button onClick={handlePrint} className="flex-1 py-4 bg-white text-[#0f172a] rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition shadow-lg">
+             🖨️ Print
+           </button>
+           <button onClick={handleSaveToGallery} disabled={isSaving} className="flex-1 py-4 bg-[#6366f1] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500 transition shadow-lg disabled:opacity-50">
+             {isSaving ? 'Saving...' : '💾 Save Img'}
+           </button>
+           <button onClick={onClose} className="w-14 bg-white/10 text-white rounded-2xl font-black text-xl hover:bg-rose-500 transition flex items-center justify-center">
+             ✕
+           </button>
         </div>
       </div>
-       <style>{`
-        @media print {
-          @page { margin: 0; size: ${isA4SixUp ? 'A4 portrait' : 'auto'}; }
-          html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
-          .no-print { display: none !important; }
-          body * { visibility: hidden; }
-          .print-receipt, .print-receipt * { visibility: visible; }
-          ${!isA4SixUp ? `
-            .print-receipt { 
-              position: absolute; left: 0; top: 0; margin: 0; padding: 0 !important; 
-              box-shadow: none !important; border: none !important; 
-              width: 100% !important; max-width: none !important; transform: none !important; 
-              min-height: auto !important;
-            }
-          ` : `
-            .print-grid, .print-grid * { visibility: visible; }
-            .print-grid {
-              position: absolute; left: 0; top: 0;
-              display: grid !important;
-              grid-template-columns: 1fr 1fr;
-              grid-template-rows: 1fr 1fr 1fr;
-              width: 210mm !important;
-              height: 297mm !important;
-            }
-          `}
-        }
-      `}</style>
     </div>
   );
 };

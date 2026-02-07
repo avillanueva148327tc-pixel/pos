@@ -1,4 +1,3 @@
-
 import { InventoryItem, UtangRecord, UtangItem, Customer, AppSettings } from '../types';
 
 export interface TransactionResult {
@@ -7,6 +6,7 @@ export interface TransactionResult {
   updatedRecords: UtangRecord[];
   newRecord?: UtangRecord;
   error?: string;
+  shouldPrint?: boolean;
 }
 
 export const TransactionService = {
@@ -75,7 +75,8 @@ export const TransactionService = {
                 success: true,
                 updatedInventory: newInventory,
                 updatedRecords: updatedRecords,
-                newRecord: mergedRecord
+                newRecord: mergedRecord,
+                shouldPrint: !!data.shouldPrint
             };
         }
     }
@@ -92,7 +93,8 @@ export const TransactionService = {
         success: true,
         updatedInventory: newInventory,
         updatedRecords: [newRecord, ...records],
-        newRecord: newRecord
+        newRecord: newRecord,
+        shouldPrint: !!data.shouldPrint
     };
   },
 

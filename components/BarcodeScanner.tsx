@@ -55,7 +55,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   const getCameras = async () => {
     try {
-      if (!Html5Qrcode) return [];
+      if (typeof Html5Qrcode === 'undefined') return [];
       const devices = await Html5Qrcode.getCameras();
       if (isMounted.current && devices && devices.length > 0) {
         setCameras(devices);
@@ -130,6 +130,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   const startScanner = async (cameraId?: string) => {
     if (isInitializing.current || isStopping.current) return;
+    
+    // Safety Check for Library Loading
+    if (typeof Html5Qrcode === 'undefined') {
+        setHasError("Scanner library not loaded. Check internet connection.");
+        return;
+    }
+
     isInitializing.current = true;
     
     if (isMounted.current) {

@@ -1,6 +1,6 @@
 
-import React, { useState, useRef, useCallback } from 'react';
-import { InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, BackupData, UtangItem } from '../types';
+import React, { useState, useRef } from 'react';
+import { InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, BackupData, ShiftRecord } from '../types';
 
 interface BackupRestoreModalProps {
   onClose: () => void;
@@ -9,6 +9,7 @@ interface BackupRestoreModalProps {
   records: UtangRecord[];
   settings: AppSettings;
   branch: BranchConfig;
+  shiftHistory: ShiftRecord[];
   onRestore: (data: Partial<BackupData['data']>, mode: 'merge' | 'replace') => void;
   lastSaved?: string | null;
 }
@@ -74,7 +75,7 @@ interface RestoreStats {
 }
 
 const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
-  onClose, inventory, customers, records, settings, branch, onRestore, lastSaved
+  onClose, inventory, customers, records, settings, branch, shiftHistory, onRestore, lastSaved
 }) => {
   const [activeTab, setActiveTab] = useState<'backup' | 'restore'>('backup');
   const [dragActive, setDragActive] = useState(false);
@@ -84,13 +85,15 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     inventory: true,
     customers: true,
     records: true,
+    shifts: true,
     settings: true
   });
   
   const [csvModules, setCsvModules] = useState({
     inventory: true,
     customers: true,
-    records: true
+    records: true,
+    shifts: true
   });
 
   // Restore State
@@ -118,6 +121,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       if (selectedModules.inventory) exportPayload.data.inventory = inventory;
       if (selectedModules.customers) exportPayload.data.customers = customers;
       if (selectedModules.records) exportPayload.data.records = records;
+      if (selectedModules.shifts) exportPayload.data.shifts = shiftHistory;
       if (selectedModules.settings) {
         exportPayload.data.settings = settings;
         exportPayload.data.branch = branch;
@@ -131,7 +135,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     }
   };
 
-  const handleExportCSV = (type: 'inventory' | 'records' | 'customers') => {
+  const handleExportCSV = (type: 'inventory' | 'records' | 'customers' | 'shifts') => {
     let content = "";
     let filename = "";
 
@@ -157,6 +161,13 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       }).join('\n');
       filename = `Sales_Records_${new Date().toISOString().split('T')[0]}.csv`;
     }
+    else if (type === 'shifts') {
+      content = "Date_Opened,Date_Closed,Opened_By,Start_Cash,Sales,Expected,Actual,Discrepancy,Status\n";
+      content += shiftHistory.map(s => 
+        [s.openedAt, s.closedAt, s.openedBy, s.startingCash, s.cashSales, s.expectedTotal, s.actualTotal, s.discrepancy, s.status].map(toCSVField).join(',')
+      ).join('\n');
+      filename = `Shift_History_${new Date().toISOString().split('T')[0]}.csv`;
+    }
 
     downloadBlob(new Blob([content], { type: 'text/csv;charset=utf-8;' }), filename);
   };
@@ -166,6 +177,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     if (csvModules.inventory) { handleExportCSV('inventory'); count++; }
     if (csvModules.customers) { setTimeout(() => handleExportCSV('customers'), 300); count++; }
     if (csvModules.records) { setTimeout(() => handleExportCSV('records'), 600); count++; }
+    if (csvModules.shifts) { setTimeout(() => handleExportCSV('shifts'), 900); count++; }
     
     if (count > 0) setStatusMsg({ type: 'success', text: `${count} CSV files downloaded.` });
     else setStatusMsg({ type: 'error', text: "Select at least one module." });
@@ -205,9 +217,9 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
-      if (file.name.endsWith('.json')) {
+      if (file.name.toLowerCase().endsWith('.json')) {
         processJSON(content);
-      } else if (file.name.endsWith('.csv')) {
+      } else if (file.name.toLowerCase().endsWith('.csv')) {
         processCSVImport(content, file.name);
       } else {
         setStatusMsg({ type: 'error', text: "Unsupported file type. Please use .JSON or .CSV" });
@@ -225,12 +237,21 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       let newItems = 0;
       let updates = 0;
 
-      // Simple heuristic for stats (matches by ID)
+      // Simple heuristic for stats (matches by ID or Name)
       if (data.inventory) {
-        data.inventory.forEach((i: InventoryItem) => inventory.some(ex => ex.id === i.id) ? updates++ : newItems++);
+        data.inventory.forEach((i: InventoryItem) => 
+          inventory.some(ex => ex.id === i.id || ex.name.toLowerCase() === i.name.toLowerCase()) ? updates++ : newItems++
+        );
       }
       if (data.customers) {
-        data.customers.forEach((c: Customer) => customers.some(ex => ex.id === c.id) ? updates++ : newItems++);
+        data.customers.forEach((c: Customer) => 
+          customers.some(ex => ex.id === c.id || ex.name.toLowerCase() === c.name.toLowerCase()) ? updates++ : newItems++
+        );
+      }
+      if (data.shifts) {
+        data.shifts.forEach((s: ShiftRecord) => 
+          shiftHistory.some(ex => ex.id === s.id) ? updates++ : newItems++
+        );
       }
 
       setRestoreData(data);
@@ -245,7 +266,8 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       const rows = parseCSV(csvStr);
       if (rows.length < 2) throw new Error("Empty CSV");
 
-      const header = rows[0].map(h => h.toLowerCase().trim());
+      // Normalize headers (lowercase, remove spaces, handle BOM)
+      const header = rows[0].map(h => h.toLowerCase().trim().replace(/^\ufeff/, ''));
       const dataRows = rows.slice(1);
       
       let importedData: Partial<BackupData['data']> = {};
@@ -254,7 +276,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       let updateCount = 0;
 
       // Detect Type based on headers
-      if (header.includes('stock') && header.includes('retail_price')) {
+      if (header.includes('retail_price') || (header.includes('price') && header.includes('stock'))) {
         dataType = 'Inventory';
         const items: InventoryItem[] = [];
         dataRows.forEach(row => {
@@ -266,7 +288,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
             if (col === 'name') item.name = val;
             if (col === 'category') item.category = val;
             if (col === 'stock') item.stock = parseFloat(val) || 0;
-            if (col === 'retail_price') item.price = parseFloat(val) || 0;
+            if (col === 'retail_price' || col === 'price') item.price = parseFloat(val) || 0;
             if (col === 'cost') item.originalPrice = parseFloat(val) || 0;
             if (col === 'unit') item.unit = val || 'pc';
             if (col === 'barcode') item.barcode = val;
@@ -274,7 +296,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           });
 
           // Check if exists by name/barcode
-          if (inventory.some(ex => ex.name === item.name || (item.barcode && ex.barcode === item.barcode))) {
+          if (inventory.some(ex => ex.name.toLowerCase() === item.name.toLowerCase() || (item.barcode && ex.barcode === item.barcode))) {
             updateCount++;
           } else {
             newCount++;
@@ -283,7 +305,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         });
         importedData.inventory = items;
 
-      } else if (header.includes('credit_limit')) {
+      } else if (header.includes('credit_limit') || (header.includes('name') && header.includes('contact'))) {
         dataType = 'Customers';
         const custs: Customer[] = [];
         dataRows.forEach(row => {
@@ -297,6 +319,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
             if (col === 'address') cust.address = val;
             if (col === 'credit_limit') cust.creditLimit = parseFloat(val) || 0;
             if (col === 'id_code') cust.barcode = val;
+            if (col === 'nickname') cust.nickname = val;
           });
 
           if (customers.some(ex => ex.name.toLowerCase() === cust.name.toLowerCase())) updateCount++;
@@ -305,6 +328,30 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           custs.push(cust);
         });
         importedData.customers = custs;
+
+      } else if (header.includes('opened_by') || header.includes('start_cash')) {
+        dataType = 'Shift History';
+        const shifts: ShiftRecord[] = [];
+        dataRows.forEach(row => {
+           if (!row[0]) return;
+           const shift: any = { id: crypto.randomUUID(), movements: [] };
+           header.forEach((col, idx) => {
+              const val = row[idx];
+              if (col === 'date_opened') shift.openedAt = val;
+              if (col === 'date_closed') shift.closedAt = val;
+              if (col === 'opened_by') shift.openedBy = val;
+              if (col === 'start_cash') shift.startingCash = parseFloat(val) || 0;
+              if (col === 'sales') shift.cashSales = parseFloat(val) || 0;
+              if (col === 'expected') shift.expectedTotal = parseFloat(val) || 0;
+              if (col === 'actual') shift.actualTotal = parseFloat(val) || 0;
+              if (col === 'discrepancy') shift.discrepancy = parseFloat(val) || 0;
+              if (col === 'status') shift.status = val;
+           });
+           if (shiftHistory.some(s => s.openedAt === shift.openedAt)) updateCount++;
+           else newCount++;
+           shifts.push(shift);
+        });
+        importedData.shifts = shifts;
 
       } else {
         throw new Error("Unknown CSV format. Check headers.");
@@ -403,8 +450,8 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                    <span className="text-2xl">📊</span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                   {['inventory', 'customers', 'records'].map(k => (
+                <div className="grid grid-cols-2 gap-2">
+                   {Object.keys(csvModules).map(k => (
                       <div key={k} onClick={() => setCsvModules(p => ({...p, [k]: !p[k as keyof typeof csvModules]}))} className={`p-3 rounded-xl border cursor-pointer text-center transition-all ${csvModules[k as keyof typeof csvModules] ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600' : 'bg-transparent border-slate-200 dark:border-slate-700 opacity-50'}`}>
                          <p className="text-[9px] font-black uppercase">{k}</p>
                       </div>
@@ -445,31 +492,31 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                          </div>
                          <div>
                             <h4 className="font-black text-sm dark:text-white uppercase">{restoreStats?.type} Data Analysis</h4>
-                            <p className="text-[10px] text-slate-400">Ready to merge</p>
+                            <p className="text-[10px] text-slate-400">{restoreStats?.dataType || 'Mixed Data'} • Ready to process</p>
                          </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
                          <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl text-center">
                             <span className="block font-black text-2xl text-emerald-500">{restoreStats?.newCount}</span>
-                            <span className="text-[9px] font-bold text-slate-500 uppercase">New Items</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">New Entries</span>
                          </div>
                          <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-center">
                             <span className="block font-black text-2xl text-amber-500">{restoreStats?.updateCount}</span>
-                            <span className="text-[9px] font-bold text-slate-500 uppercase">To Update</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">To Update/Merge</span>
                          </div>
                       </div>
                    </div>
 
                    <div className="mt-auto space-y-3">
                       <div className="flex p-1 bg-slate-200 dark:bg-slate-800 rounded-xl">
-                        <button onClick={() => setRestoreMode('merge')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${restoreMode === 'merge' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}>Merge</button>
+                        <button onClick={() => setRestoreMode('merge')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${restoreMode === 'merge' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}>Merge & Update</button>
                         <button onClick={() => setRestoreMode('replace')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${restoreMode === 'replace' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-500'}`}>Replace All</button>
                       </div>
                       
                       <div className="flex gap-3">
                          <button onClick={() => setRestoreData(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black uppercase text-xs">Cancel</button>
-                         <button onClick={executeRestore} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:scale-[1.02] transition">Confirm Restore</button>
+                         <button onClick={executeRestore} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:scale-[1.02] transition">Confirm</button>
                       </div>
                    </div>
                 </div>

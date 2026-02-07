@@ -11,6 +11,7 @@ interface AddInventoryModalProps {
   onDelete?: (id: string) => void;
   item?: InventoryItem | null;
   initialBarcode?: string;
+  initialName?: string;
   userRole?: UserRole;
 }
 
@@ -22,10 +23,11 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
   onDelete, 
   item, 
   initialBarcode,
+  initialName,
   userRole = 'cashier' 
 }) => {
   // We use string values for inputs to allow "10." or empty states, then parse on submit
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName || '');
   const [category, setCategory] = useState(categories[0] || 'Others');
   const [barcode, setBarcode] = useState(initialBarcode || '');
   const [unit, setUnit] = useState<MeasurementUnit>('pc');
@@ -69,10 +71,11 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
         const calculatedPacks = item.stock / item.itemsPerPack;
         setPackInputStr(Number.isInteger(calculatedPacks) ? calculatedPacks.toString() : calculatedPacks.toFixed(2));
       }
-    } else if (initialBarcode) {
-      setBarcode(initialBarcode);
+    } else {
+        if (initialBarcode) setBarcode(initialBarcode);
+        if (initialName) setName(initialName);
     }
-  }, [item, initialBarcode]);
+  }, [item, initialBarcode, initialName]);
 
   const handleBarcodeScan = (code: string): ScanResultStatus => {
     setBarcode(code);

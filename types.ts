@@ -160,6 +160,30 @@ export interface Stats {
   monthlyNetProfit: number;
 }
 
+export interface CashMovement {
+  id: string;
+  type: 'in' | 'out';
+  amount: number;
+  reason: string;
+  timestamp: string;
+}
+
+export interface ShiftRecord {
+  id: string;
+  openedAt: string;
+  closedAt?: string;
+  openedBy: string;
+  closedBy?: string;
+  startingCash: number;
+  cashSales: number; // accumulated from POS transactions
+  movements: CashMovement[]; // manual add/remove
+  expectedTotal: number;
+  actualTotal?: number;
+  discrepancy?: number;
+  status: 'open' | 'closed';
+  note?: string;
+}
+
 export interface BackupData {
   metadata: {
     version: string;
@@ -174,5 +198,14 @@ export interface BackupData {
     batches?: BatchRecord[];
     settings?: AppSettings;
     branch?: BranchConfig;
+    shifts?: ShiftRecord[]; // Added for backup support
   };
+}
+
+export interface RecycleBinItem {
+  id: string;
+  type: 'inventory' | 'customer' | 'record';
+  data: any;
+  deletedAt: string;
+  originalName: string;
 }

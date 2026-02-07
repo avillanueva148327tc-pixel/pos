@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { AppSettings } from '../types';
+import React, { useState, useEffect } from 'react';
+import { AppSettings, QuickPickItem } from '../types';
 
 interface AdvancedSettingsModalProps {
   onClose: () => void;
@@ -13,6 +13,13 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
   const [newCategory, setNewCategory] = useState('');
   const [showAdminPin, setShowAdminPin] = useState(false);
   const [showCashierPin, setShowCashierPin] = useState(false);
+  
+  // Local state for Quick Picks to handle editing without jitter
+  const [localQuickPicks, setLocalQuickPicks] = useState<QuickPickItem[]>(settings.quickPicks);
+
+  useEffect(() => {
+    setLocalQuickPicks(settings.quickPicks);
+  }, [settings.quickPicks]);
 
   const handleAddCategory = () => {
     if (newCategory.trim() && !settings.categories.includes(newCategory.trim())) {
@@ -35,6 +42,54 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
             categories: prev.categories.filter(c => c !== cat)
         }));
     }
+  };
+
+  // Quick Pick Handlers
+  const handleUpdateQuickPick = (index: number, field: keyof QuickPickItem, value: string) => {
+    const updated = [...localQuickPicks];
+    updated[index] = { ...updated[index] }; // Copy
+    
+    if (field === 'price') {
+      // Allow empty string or decimals during typing
+      (updated[index] as any).price = value;
+    } else {
+      updated[index].name = value;
+    }
+    setLocalQuickPicks(updated);
+  };
+
+  const handleBlurQuickPickPrice = (index: number) => {
+    const updated = [...localQuickPicks];
+    updated[index] = { ...updated[index] };
+    const val = parseFloat((updated[index] as any).price);
+    updated[index].price = isNaN(val) ? 0 : val;
+    setLocalQuickPicks(updated);
+    saveQuickPicks(updated);
+  };
+
+  const handleSaveQuickPicksName = () => {
+    saveQuickPicks(localQuickPicks);
+  };
+
+  const handleAddQuickPick = () => {
+    const newList = [...localQuickPicks, { name: '', price: 0 }];
+    setLocalQuickPicks(newList);
+    saveQuickPicks(newList);
+  };
+
+  const handleRemoveQuickPick = (index: number) => {
+    const newList = localQuickPicks.filter((_, i) => i !== index);
+    setLocalQuickPicks(newList);
+    saveQuickPicks(newList);
+  };
+
+  const saveQuickPicks = (list: QuickPickItem[]) => {
+    // Sanitize prices to numbers before saving to settings
+    const sanitized = list.map(item => ({
+      name: item.name,
+      price: typeof item.price === 'string' ? (parseFloat(item.price) || 0) : item.price
+    }));
+    setSettings(prev => ({ ...prev, quickPicks: sanitized }));
   };
 
   const isSalesTargetEnabled = settings.dailySalesTarget > 0;
@@ -63,7 +118,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
 
       <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar flex-1">
         
-        {/* Receipt Configuration Section (New) */}
+        {/* Receipt Configuration Section */}
         <div className="p-6 bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl border border-white/5 relative overflow-hidden group">
            <div className="absolute top-0 right-0 w-32 h-32 bg-[#6366f1]/10 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-[#6366f1]/20 transition"></div>
            <label className={labelStyle}>Receipt Configuration</label>
@@ -79,6 +134,55 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
                 Open Studio 🎨
               </button>
            </div>
+        </div>
+
+        {/* Quick Picks Section */}
+        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
+          <div className="flex justify-between items-center mb-4">
+             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Quick Pick Shortcuts</label>
+             <button onClick={handleAddQuickPick} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-500 hover:text-white transition">
+                + Add Item
+             </button>
+          </div>
+          
+          <div className="space-y-2">
+             {localQuickPicks.length === 0 && (
+                <div className="text-center py-4 opacity-50 border border-dashed border-white/10 rounded-xl">
+                   <p className="text-[10px] text-slate-400 uppercase">No shortcuts defined</p>
+                </div>
+             )}
+             {localQuickPicks.map((item, idx) => (
+                <div key={idx} className="flex gap-2">
+                   <input 
+                     className="flex-[2] bg-[#0f172a] rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#6366f1]"
+                     placeholder="Item Name"
+                     value={item.name}
+                     onChange={e => handleUpdateQuickPick(idx, 'name', e.target.value)}
+                     onBlur={handleSaveQuickPicksName}
+                   />
+                   <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">₱</span>
+                      <input 
+                        type="number"
+                        className="w-full bg-[#0f172a] rounded-xl border border-slate-700 pl-6 pr-3 py-2 text-xs font-bold text-white outline-none focus:border-[#6366f1]"
+                        placeholder="0"
+                        value={item.price}
+                        onChange={e => handleUpdateQuickPick(idx, 'price', e.target.value)}
+                        onBlur={() => handleBlurQuickPickPrice(idx)}
+                      />
+                   </div>
+                   <button 
+                     onClick={() => handleRemoveQuickPick(idx)}
+                     className="w-9 h-9 rounded-xl bg-white/5 text-slate-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition"
+                   >
+                     ✕
+                   </button>
+                </div>
+             ))}
+          </div>
+          <p className="text-[9px] text-slate-500 mt-3 px-1">
+             These items appear in the "Manual Entry" tab for fast access.
+          </p>
         </div>
 
         {/* Security Section */}
@@ -176,7 +280,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
           </div>
           
           {isSalesTargetEnabled && (
-            <div className="animate-in slide-in-from-top-2">
+            <div className="animate-in slide-in-from-top-2 mb-6">
               <div className="flex items-center gap-3 bg-[#0f172a] border border-slate-700 rounded-2xl px-4 py-3">
                  <span className="text-xl">🎯</span>
                  <span className="text-sm font-black text-emerald-500">₱</span>

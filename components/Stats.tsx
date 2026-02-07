@@ -29,7 +29,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
       value: `₱${stats.monthlyNetProfit.toLocaleString()}`, 
       color: stats.monthlyNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400', 
       icon: '💎', 
-      bg: 'bg-[#1e293b] border-emerald-500/20',
+      bg: 'bg-gradient-to-br from-[#1e293b] to-[#0f172a] border-emerald-500/20',
       subValue: 'Realized Income',
       adminOnly: true
     },
@@ -38,7 +38,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
       value: `₱${stats.unpaidTotal.toLocaleString()}`, 
       color: 'text-rose-400', 
       icon: '💸', 
-      bg: 'bg-[#1e293b] border-rose-500/20',
+      bg: 'bg-gradient-to-br from-[#1e293b] to-[#0f172a] border-rose-500/20',
       subValue: `${stats.activeDebtors} Active Debtors`,
       adminOnly: false
     },
@@ -47,7 +47,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
       value: `₱${stats.totalInvestmentValue.toLocaleString()}`, 
       color: 'text-blue-400', 
       icon: '🏭', 
-      bg: 'bg-[#1e293b] border-blue-500/20',
+      bg: 'bg-gradient-to-br from-[#1e293b] to-[#0f172a] border-blue-500/20',
       subValue: 'Capital Tied Up',
       adminOnly: true
     },
@@ -56,7 +56,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
       value: `₱${stats.potentialProfit.toLocaleString()}`, 
       color: 'text-cyan-400', 
       icon: '📈', 
-      bg: 'bg-[#1e293b] border-cyan-500/20',
+      bg: 'bg-gradient-to-br from-[#1e293b] to-[#0f172a] border-cyan-500/20',
       subValue: `Est. ${marginPercent.toFixed(0)}% Margin`,
       adminOnly: true
     },
@@ -65,7 +65,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
       value: `₱${stats.dailySales.toLocaleString()}`, 
       color: 'text-indigo-400', 
       icon: '💰', 
-      bg: 'bg-[#1e293b] border-indigo-500/20',
+      bg: 'bg-gradient-to-br from-[#1e293b] to-[#0f172a] border-indigo-500/20',
       subValue: 'Cash Inflow',
       adminOnly: false
     },
@@ -74,7 +74,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
       value: `₱${stats.monthlyExpenses.toLocaleString()}`, 
       color: 'text-amber-400', 
       icon: '📉', 
-      bg: 'bg-[#1e293b] border-amber-500/20',
+      bg: 'bg-gradient-to-br from-[#1e293b] to-[#0f172a] border-amber-500/20',
       subValue: 'Stock Purchases',
       adminOnly: true
     },
@@ -86,7 +86,7 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
     <section className="mb-6 md:mb-8 px-1">
       <div className="flex items-center justify-between mb-4 px-1">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-1 bg-[#6366f1] rounded-full"></div>
+          <div className="h-3 w-1 bg-[#6366f1] rounded-full shadow-[0_0_10px_#6366f1]"></div>
           <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Financial Pulse</h2>
         </div>
         
@@ -106,8 +106,11 @@ const Stats: React.FC<StatsProps> = ({ stats, userRole = 'cashier' }) => {
 
       <div className={`grid grid-cols-2 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 md:gap-4`}>
         {visibleStats.map((item, idx) => (
-          <div key={idx} className={`p-4 md:p-5 rounded-3xl border transition-all duration-300 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 group ${item.bg} border-white/5`}>
-            <div className="flex flex-col h-full justify-between gap-2 md:gap-3">
+          <div key={idx} className={`p-4 md:p-5 rounded-3xl border transition-all duration-300 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 group ${item.bg} border-white/5 relative overflow-hidden`}>
+            {/* Subtle Gradient Glow */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-white/10 transition-colors pointer-events-none"></div>
+            
+            <div className="flex flex-col h-full justify-between gap-2 md:gap-3 relative z-10">
               <div className="flex justify-between items-start">
                 <span className="text-lg md:text-xl grayscale group-hover:grayscale-0 transition-all opacity-80">{item.icon}</span>
               </div>

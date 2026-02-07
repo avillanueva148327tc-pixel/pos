@@ -76,26 +76,59 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   // Entry Mode State
   const [entryMode, setEntryMode] = useState<'inventory' | 'manual'>('inventory');
   
-  // Manual Form State - Added cost and itemsPerPack
+  // Manual Form State - Added total for reverse calc
   const [manualForm, setManualForm] = useState({ 
     name: '', 
     price: '', 
     cost: '', 
     itemsPerPack: '', 
-    qty: 1 
+    qty: 1,
+    total: ''
   });
+
+  // Helper to sync Manual Form calculations
+  const updateManualForm = (field: 'price' | 'qty' | 'total' | 'name' | 'cost' | 'itemsPerPack', value: string | number) => {
+    setManualForm(prev => {
+      const next = { ...prev, [field]: value };
+      
+      const price = parseFloat(next.price);
+      
+      if (field === 'price' || field === 'qty') {
+        const qty = parseFloat(next.qty.toString());
+        if (!isNaN(price) && !isNaN(qty)) {
+          next.total = (price * qty).toFixed(2);
+        }
+      } else if (field === 'total') {
+        const total = parseFloat(next.total);
+        if (!isNaN(total) && !isNaN(price) && price > 0) {
+          next.qty = parseFloat((total / price).toFixed(3));
+        }
+      }
+      return next;
+    });
+  };
 
   // Quick Pick Edit State
   const [isEditingQuickPicks, setIsEditingQuickPicks] = useState(false);
-  const [tempQuickPicks, setTempQuickPicks] = useState<QuickPickItem[]>(quickPicks);
+  // Allow string type for price to handle "12." editing state correctly
+  const [tempQuickPicks, setTempQuickPicks] = useState<{name: string, price: string | number}[]>(quickPicks);
   const [qpSearch, setQpSearch] = useState('');
 
   useEffect(() => {
-    if (isEditingQuickPicks) setTempQuickPicks(quickPicks);
+    // Sync when editing starts or props change
+    if (isEditingQuickPicks) {
+        setTempQuickPicks(quickPicks);
+    }
   }, [isEditingQuickPicks, quickPicks]);
 
   const handleSaveQuickPicks = () => {
-    const cleanPicks = tempQuickPicks.filter(qp => qp.name.trim() !== '');
+    // Sanitize and convert back to strict QuickPickItem
+    const cleanPicks: QuickPickItem[] = tempQuickPicks
+        .filter(qp => qp.name.trim() !== '')
+        .map(qp => ({
+            name: qp.name,
+            price: typeof qp.price === 'string' ? (parseFloat(qp.price) || 0) : qp.price
+        }));
     onUpdateQuickPicks(cleanPicks);
     setIsEditingQuickPicks(false);
   };
@@ -113,10 +146,12 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     setTempQuickPicks(tempQuickPicks.filter((_, i) => i !== index));
   };
 
-  const handleUpdateTempQuickPick = (index: number, field: keyof QuickPickItem, value: any) => {
+  const handleUpdateTempQuickPick = (index: number, field: keyof QuickPickItem, value: string) => {
     const newPicks = [...tempQuickPicks];
+    newPicks[index] = { ...newPicks[index] }; // Create copy to avoid mutation
+    
     if (field === 'price') {
-        newPicks[index].price = parseFloat(value) || 0;
+        newPicks[index].price = value; // Keep as string while editing
     } else {
         newPicks[index].name = value;
     }
@@ -299,21 +334,21 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     
     setItems([...items, {
         name: manualForm.name,
-        quantity: Math.max(1, manualForm.qty),
+        quantity: Math.max(0.001, manualForm.qty), // Allow small fractionals
         price: price,
         cost: parseFloat(manualForm.cost) || 0, // Track cost for manual items
         itemsPerPack: parseFloat(manualForm.itemsPerPack) || undefined,
         date: dateStr
     }]);
 
-    setManualForm({ name: '', price: '', cost: '', itemsPerPack: '', qty: 1 });
+    setManualForm({ name: '', price: '', cost: '', itemsPerPack: '', qty: 1, total: '' });
     if ('vibrate' in navigator) navigator.vibrate(50);
   };
 
   const handleQuickPick = (qp: { name: string, price: number }) => {
     if (qp.price === 0) {
         // Prefill manual form if price is variable
-        setManualForm(prev => ({ ...prev, name: qp.name, price: '', qty: 1 }));
+        setManualForm(prev => ({ ...prev, name: qp.name, price: '', qty: 1, total: '' }));
     } else {
         // Add immediately
         setItems([...items, {
@@ -561,7 +596,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                             {filteredInventory.length === 0 ? (
                               <div className="p-4 text-center">
                                   <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">No items found.</p>
-                                  <button onClick={() => { setEntryMode('manual'); setManualForm(prev => ({...prev, name: productSearch})); setProductSearch(''); }} className="text-[10px] font-black text-amber-400 hover:underline uppercase">
+                                  <button onClick={() => { setEntryMode('manual'); updateManualForm('name', productSearch); setProductSearch(''); }} className="text-[10px] font-black text-amber-400 hover:underline uppercase">
                                     Use Manual Entry
                                   </button>
                               </div>
@@ -632,7 +667,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                                                 placeholder="Item Name" 
                                             />
                                             <input 
-                                                value={qp.price || ''} 
+                                                value={qp.price} 
                                                 onChange={(e) => handleUpdateTempQuickPick(idx, 'price', e.target.value)}
                                                 className="flex-1 bg-[#0f172a] text-white text-[10px] font-bold px-2 py-2 rounded-lg border border-white/10 outline-none focus:border-indigo-500" 
                                                 placeholder="Price" 
@@ -686,9 +721,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                            <input 
                              required
                              className="w-full p-3 bg-[#0f172a] rounded-xl border border-slate-700 text-xs font-bold text-white outline-none focus:border-amber-500 transition placeholder:text-slate-600"
-                             placeholder="Item Name (e.g. Service Fee)"
+                             placeholder="Item Name (e.g. Rice, Service)"
                              value={manualForm.name}
-                             onChange={e => setManualForm({...manualForm, name: e.target.value})}
+                             onChange={e => updateManualForm('name', e.target.value)}
                              autoFocus
                            />
                         </div>
@@ -696,7 +731,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                         {/* Retail Price & Cost Price */}
                         <div className="grid grid-cols-2 gap-3">
                            <div className="relative">
-                              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Retail Price</label>
+                              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Price / Unit or Kilo</label>
                               <span className="absolute left-3 top-[29px] text-slate-500 text-xs font-bold">₱</span>
                               <input 
                                 required
@@ -705,7 +740,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                                 className="w-full p-3 pl-7 bg-[#0f172a] rounded-xl border border-slate-700 text-xs font-bold text-white outline-none focus:border-amber-500 transition placeholder:text-slate-600"
                                 placeholder="0.00"
                                 value={manualForm.price}
-                                onChange={e => setManualForm({...manualForm, price: e.target.value})}
+                                onChange={e => updateManualForm('price', e.target.value)}
                               />
                            </div>
                            <div className="relative">
@@ -717,38 +752,50 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                                 className="w-full p-3 pl-7 bg-[#0f172a] rounded-xl border border-slate-700 text-xs font-bold text-white outline-none focus:border-emerald-500 transition placeholder:text-slate-600"
                                 placeholder="0.00"
                                 value={manualForm.cost}
-                                onChange={e => setManualForm({...manualForm, cost: e.target.value})}
+                                onChange={e => updateManualForm('cost', e.target.value)}
                               />
                            </div>
                         </div>
 
-                        {/* Quantity & Units per Pack */}
+                        {/* Quantity & Total Calculation */}
                         <div className="grid grid-cols-2 gap-3">
-                           <div className="flex items-end">
-                              <div className="w-full">
-                                 <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Quantity</label>
-                                 <div className="flex items-center bg-[#0f172a] rounded-xl border border-slate-700 h-[42px]">
-                                    <button type="button" onClick={() => setManualForm(p => ({...p, qty: Math.max(1, p.qty - 1)}))} className="w-10 h-full text-slate-400 hover:text-white font-bold text-lg">-</button>
-                                    <input 
-                                      type="number" 
-                                      className="flex-1 w-full bg-transparent text-center text-xs font-bold text-white outline-none"
-                                      value={manualForm.qty}
-                                      onChange={e => setManualForm({...manualForm, qty: parseFloat(e.target.value) || 1})}
-                                    />
-                                    <button type="button" onClick={() => setManualForm(p => ({...p, qty: p.qty + 1}))} className="w-10 h-full text-slate-400 hover:text-white font-bold text-lg">+</button>
-                                 </div>
+                           <div>
+                              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Weight / Qty</label>
+                              <div className="flex items-center bg-[#0f172a] rounded-xl border border-slate-700 h-[42px]">
+                                <input 
+                                  type="number" 
+                                  step="any"
+                                  className="flex-1 w-full bg-transparent text-center text-xs font-bold text-white outline-none"
+                                  placeholder="1"
+                                  value={manualForm.qty}
+                                  onChange={e => updateManualForm('qty', e.target.value)}
+                                />
                               </div>
                            </div>
+                           
                            <div>
-                              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Units/Pack (Opt)</label>
+                              <label className="block text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-1">Total Amount (₱)</label>
                               <input 
                                 type="number"
-                                className="w-full h-[42px] p-3 bg-[#0f172a] rounded-xl border border-slate-700 text-xs font-bold text-white outline-none focus:border-indigo-500 transition placeholder:text-slate-600"
-                                placeholder="1"
-                                value={manualForm.itemsPerPack}
-                                onChange={e => setManualForm({...manualForm, itemsPerPack: e.target.value})}
+                                step="any"
+                                className="w-full h-[42px] p-3 bg-[#0f172a] rounded-xl border border-emerald-500/30 text-xs font-bold text-emerald-400 outline-none focus:border-emerald-500 transition placeholder:text-slate-700"
+                                placeholder="Auto-calc"
+                                value={manualForm.total}
+                                onChange={e => updateManualForm('total', e.target.value)}
                               />
                            </div>
+                        </div>
+                        
+                        {/* Units Per Pack (Optional, Full Width) */}
+                        <div>
+                           <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Units per Pack (Optional)</label>
+                           <input 
+                             type="number"
+                             className="w-full p-3 bg-[#0f172a] rounded-xl border border-slate-700 text-xs font-bold text-white outline-none focus:border-indigo-500 transition placeholder:text-slate-600"
+                             placeholder="1 (For inventory tracking)"
+                             value={manualForm.itemsPerPack}
+                             onChange={e => updateManualForm('itemsPerPack', e.target.value)}
+                           />
                         </div>
 
                         <div className="flex gap-2 mt-2">
@@ -906,7 +953,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
           </div>
         </div>
         
-        {/* ... Overlays (Auth, Merge, Warnings) remain the same ... */}
+        {/* ... Overlays (Auth, Merge, Warnings) ... */}
         {showAuthPanel && (
             <div className="absolute inset-0 z-[120] bg-[#020617]/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in rounded-[2.5rem]">
               <div className="w-full max-w-sm text-center space-y-6">
