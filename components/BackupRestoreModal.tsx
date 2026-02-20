@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, BackupData, ShiftRecord } from '../types';
 

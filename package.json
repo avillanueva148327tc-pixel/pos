@@ -1,19 +1,23 @@
 {
-  "name": "+sari-smart-debtpro",
+  "name": "sari-sari-debt-pro",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.41.0",
+    "@tailwindcss/vite": "^4.2.0",
+    "html-to-image": "^1.11.11",
+    "qrcode": "^1.5.3",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "recharts": "2.12.7",
-    "html-to-image": "^1.11.11",
-    "qrcode": "^1.5.3"
+    "tailwindcss": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

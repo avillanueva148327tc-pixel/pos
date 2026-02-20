@@ -122,6 +122,20 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                       </p>
                     </div>
                   </div>
+
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black shrink-0">4</div>
+                    <div>
+                      <h4 className="font-bold dark:text-white">⚡ Rapid "Scan-and-Go" Switching</h4>
+                      <p className="text-sm text-slate-500 mt-1">
+                        For fast checkouts, if you scan a new member's ID while another member's transaction is active, the system will:
+                      </p>
+                      <ul className="list-disc pl-4 text-xs text-slate-500 mt-2 space-y-1">
+                        <li><b>Automatically complete</b> the current transaction as a cash sale.</li>
+                        <li>Instantly <b>start a new transaction</b> for the newly scanned member.</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -173,7 +187,7 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                       <span className="text-xl">👥</span>
                       <div>
                         <p className="font-bold text-sm dark:text-white">Registration</p>
-                        <p className="text-xs text-slate-500 mt-1">Go to Customers tab > Add Suki. Set a <b>Credit Limit</b> to control max debt.</p>
+                        <p className="text-xs text-slate-500 mt-1">Go to Customers tab &gt; Add Suki. Set a <b>Credit Limit</b> to control max debt.</p>
                       </div>
                    </div>
                    
@@ -259,7 +273,7 @@ const UserGuideModal: React.FC<UserGuideModalProps> = ({ onClose }) => {
                       </div>
                       <p className="text-xs text-slate-500 ml-8 leading-relaxed">
                          Connect a <b>Bluetooth</b> or <b>USB Thermal Printer</b> for physical receipts.
-                         Customize the receipt layout in "Settings" > "Receipt Template".
+                         Customize the receipt layout in "Settings" &gt; "Receipt Template".
                          <br/><br/>
                          <b>Windows USB Issues?</b> If you see "Driver Conflict", follow the on-screen link to download <b>Zadig</b> and replace the driver with <b>WinUSB</b>.
                       </p>

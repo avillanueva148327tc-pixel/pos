@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 
 // Declare global Html5Qrcode provided by the library in index.html
@@ -18,7 +17,25 @@ interface BarcodeScannerProps {
   lastScannedItem?: string;
   successVibrationPattern?: number | number[];
   enableSound?: boolean;
+  scanContext?: string;
 }
+
+// Singleton AudioContext for performance
+let audioCtx: AudioContext | null = null;
+const getAudioContext = () => {
+  if (!audioCtx) {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContext) {
+        audioCtx = new AudioContext();
+      }
+    } catch (e) {
+      console.warn("Could not create AudioContext", e);
+    }
+  }
+  return audioCtx;
+};
+
 
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ 
   onScan, 
@@ -26,7 +43,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   isContinuous = false,
   lastScannedItem: initialLastItem,
   successVibrationPattern = 50,
-  enableSound = true
+  enableSound = true,
+  scanContext
 }) => {
   const scannerRef = useRef<any>(null);
   const isInitializing = useRef(false);
@@ -43,7 +61,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
   
-  // Local state for sound toggle, initialized from prop
   const [isSoundOn, setIsSoundOn] = useState(enableSound);
 
   const readerId = "reader";
@@ -69,11 +86,10 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   const playSound = (type: 'success' | 'error' | 'warning') => {
     if (!isSoundOn) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      
-      const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
@@ -83,7 +99,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       const now = ctx.currentTime;
 
       if (type === 'success') {
-        // High pitch pleasant beep
         osc.type = 'sine';
         osc.frequency.setValueAtTime(1200, now);
         gain.gain.setValueAtTime(0.1, now);
@@ -91,7 +106,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         osc.start(now);
         osc.stop(now + 0.15);
       } else if (type === 'error') {
-        // Low pitch buzz (Sawtooth)
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(150, now);
         gain.gain.setValueAtTime(0.1, now);
@@ -99,7 +113,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         osc.start(now);
         osc.stop(now + 0.3);
       } else if (type === 'warning') {
-        // Descending tone
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(400, now);
         osc.frequency.linearRampToValueAtTime(200, now + 0.3);
@@ -121,7 +134,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         }
         scannerRef.current.clear();
       } catch (e) {
-        // Ignore errors during cleanup to prevent unhandled promise rejections
         console.warn("Cleanup warning:", e);
       }
       scannerRef.current = null;
@@ -131,7 +143,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const startScanner = async (cameraId?: string) => {
     if (isInitializing.current || isStopping.current) return;
     
-    // Safety Check for Library Loading
     if (typeof Html5Qrcode === 'undefined') {
         setHasError("Scanner library not loaded. Check internet connection.");
         return;
@@ -147,7 +158,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     try {
       await cleanupScanner();
 
-      // Ensure DOM element exists and is clear
       const element = document.getElementById(readerId);
       if (!element) throw new Error("Scanner element not found");
       element.innerHTML = "";
@@ -156,7 +166,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       scannerRef.current = html5QrCode;
 
       const config = { 
-        fps: 10,
+        fps: 15,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
           const size = Math.floor(minEdge * 0.75);
@@ -181,14 +191,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             playSound('success');
             setStatusMessage("Added!");
             setShowFlash(true);
-            setTimeout(() => { if(isMounted.current) setShowFlash(false); }, 150);
+            setTimeout(() => { if(isMounted.current) setShowFlash(false); }, 50);
           } else if (result === ScanResultStatus.NOT_FOUND) {
-            // Error pattern: Double tap
             if ('vibrate' in navigator) navigator.vibrate([30, 50, 30]);
             playSound('error');
             setStatusMessage("Unknown Item");
           } else if (result === ScanResultStatus.OUT_OF_STOCK) {
-            // Warning pattern: Long vibration
             if ('vibrate' in navigator) navigator.vibrate(300);
             playSound('warning');
             setStatusMessage("Stock Empty!");
@@ -223,20 +231,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       const errStr = (typeof err === 'string') ? err : (err.message || err.toString());
       const lowerErr = errStr.toLowerCase();
       
-      // Expanded error detection for various permission denied formats
+      // Explicit handling for common permission rejection scenarios
       if (
         (err.name === 'NotAllowedError') ||
         lowerErr.includes('notallowederror') || 
         lowerErr.includes('permission denied') ||
         lowerErr.includes('not allowed') ||
+        lowerErr.includes('dismissed') ||
         lowerErr.includes('getting usermedia')
       ) {
         setIsSystemDenied(true);
-        setHasError("Camera access was denied. Please check your Device Privacy Settings and allow camera access.");
+        setHasError("Browser blocked camera access.");
       } else if (lowerErr.includes('notfounderror') || lowerErr.includes('no device')) {
-        setHasError("No camera device found.");
+        setHasError("No camera device found on this system.");
       } else {
-        setHasError("Scanner error: " + errStr);
+        setHasError("Hardware error: " + errStr);
       }
     } finally {
       isInitializing.current = false;
@@ -316,8 +325,16 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         
         <div className="relative overflow-hidden bg-black aspect-square flex-shrink-0">
           <div id={readerId} className="w-full h-full scale-105"></div>
+
+          {scanContext && (
+            <div className="absolute top-6 left-0 right-0 text-center z-20 pointer-events-none p-4">
+              <div className="inline-block bg-black/60 backdrop-blur-sm text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-full border border-white/10">
+                {scanContext}
+              </div>
+            </div>
+          )}
           
-          <div className={`absolute inset-0 bg-white transition-opacity duration-150 pointer-events-none z-30 ${showFlash ? 'opacity-80' : 'opacity-0'}`}></div>
+          <div className={`absolute inset-0 bg-white transition-opacity duration-100 pointer-events-none z-30 ${showFlash ? 'opacity-100' : 'opacity-0'}`}></div>
           
           <div className={`absolute inset-0 pointer-events-none border-[40px] transition-all duration-300 z-20 ${getOverlayColor()}`}>
             <div className="w-full h-full flex items-center justify-center relative">
@@ -337,20 +354,33 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               )}
 
               {hasError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900/98 backdrop-blur-md z-40">
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/98 backdrop-blur-md z-40">
                   <div className="w-16 h-16 bg-rose-500/20 text-rose-500 rounded-2xl flex items-center justify-center text-3xl mb-4 shrink-0 mx-auto">🚫</div>
-                  <h4 className="text-white font-black text-lg mb-2">Access Denied</h4>
-                  <p className="text-slate-400 text-xs font-bold leading-relaxed mb-6 uppercase tracking-wider">{hasError}</p>
+                  <h4 className="text-white font-black text-lg mb-2 uppercase tracking-tighter">Security Blocked</h4>
+                  <p className="text-slate-400 text-[10px] font-black leading-relaxed mb-6 uppercase tracking-[0.2em]">{hasError}</p>
                   
-                  <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-left mb-6 w-full">
-                     <p className="text-[10px] font-black text-primary uppercase mb-2">How to resolve:</p>
-                     <p className="text-[10px] text-slate-300 font-bold leading-tight">
-                       Go to <b>Settings</b> > <b>Privacy</b> > <b>Camera</b> on your device. Ensure the browser is allowed to access the camera, then refresh this page.
-                     </p>
+                  <div className="bg-white/5 p-5 rounded-3xl border border-white/10 text-left mb-6 w-full space-y-4">
+                     <div>
+                        <p className="text-[9px] font-black text-indigo-400 uppercase mb-1">Likely Cause:</p>
+                        <p className="text-[10px] text-slate-300 font-bold leading-tight">
+                          The camera permission request was either dismissed or ignored multiple times.
+                        </p>
+                     </div>
+                     <div>
+                        <p className="text-[9px] font-black text-indigo-400 uppercase mb-1">Solution:</p>
+                        <p className="text-[10px] text-slate-300 font-bold leading-tight">
+                          Click the <b>Lock 🔒</b> icon in the address bar above, set <b>Camera</b> to <b>Allow</b>, then refresh the terminal.
+                        </p>
+                     </div>
                   </div>
 
-                  <button onClick={() => window.location.reload()} className="w-full py-4 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/30 mb-2">Refresh App</button>
-                  <button onClick={stopScanner} className="w-full py-4 bg-white/5 text-slate-500 rounded-2xl font-black text-xs uppercase">Close</button>
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    className="w-full py-4 bg-indigo-500 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-500/30 mb-3 active:scale-95 transition-all"
+                  >
+                    Force Terminal Refresh
+                  </button>
+                  <button onClick={stopScanner} className="w-full py-4 bg-white/5 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:text-white transition">Exit Terminal</button>
                 </div>
               )}
 
@@ -384,10 +414,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           </div>
         </div>
 
-        <div className="p-8 text-center bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex-1">
-             Terminal Scanning Ready
-          </p>
+        <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 flex justify-center items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              Scanner Protocol Active
+            </p>
+          </div>
         </div>
       </div>
 

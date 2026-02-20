@@ -6,13 +6,24 @@ export interface TransactionResult {
   updatedRecords: UtangRecord[];
   newRecord?: UtangRecord;
   error?: string;
-  shouldPrint?: boolean;
 }
+
+/**
+ * Precision Financial Engine
+ * Uses Number.EPSILON to prevent common floating point errors in JavaScript (e.g., 0.1 + 0.2)
+ */
+export const currency = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
+
+const generateRefId = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; 
+  const letters = Array.from({length: 3}, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+  const numbers = Math.floor(100 + Math.random() * 900);
+  return `${letters}-${numbers}`;
+};
 
 export const TransactionService = {
   /**
-   * "Stored Procedure" for Order Processing
-   * Centralizes validation, stock deduction, and ledger updates.
+   * Processes a POS transaction with atomic inventory deduction
    */
   processTransaction: (
     data: any, 
@@ -22,112 +33,97 @@ export const TransactionService = {
     settings: AppSettings
   ): TransactionResult => {
     
-    // 1. Validation Phase
-    const validItems = data.items.every((item: UtangItem) => 
-        !item.productId || inventory.some(i => i.id === item.productId)
-    );
-    
-    if (!validItems) {
-        return { success: false, updatedInventory: inventory, updatedRecords: records, error: "Invalid product reference detected." };
-    }
-
     const newInventory = [...inventory];
     
-    // 2. Execution Phase: Stock Deduction
-    data.items.forEach((item: UtangItem) => {
+    // 1. Inventory Integrity Check & Deduction
+    for (const item of data.items) {
         if (item.productId) {
             const idx = newInventory.findIndex(i => i.id === item.productId);
             if (idx >= 0) {
-                newInventory[idx] = {
-                    ...newInventory[idx],
-                    stock: Math.max(0, newInventory[idx].stock - item.quantity)
-                };
+                const currentItem = newInventory[idx];
+                const updatedStock = currency(currentItem.stock - item.quantity);
+                
+                // Track cost at time of sale for accurate profit analytics
+                item.cost = currentItem.originalPrice || 0;
+                
+                newInventory[idx] = { ...currentItem, stock: Math.max(0, updatedStock) };
             }
         }
-    });
+    }
 
-    // 3. Execution Phase: Record Management
+    // 2. Debt Merge Strategy (Optimization for level-1 accounts)
     if (!data.isPaid && !data.forceNew && data.customerName !== 'Walk-in Customer') {
         const existingRecordIndex = records.findIndex(r => r.customerName === data.customerName && !r.isPaid);
         if (existingRecordIndex >= 0) {
             const existingRecord = records[existingRecordIndex];
-            
             const updatedItems = [...existingRecord.items, ...data.items];
-            const updatedTotal = existingRecord.totalAmount + data.totalAmount; 
-            const updatedQuantity = existingRecord.quantity + data.quantity;
             
-            const existingProducts = existingRecord.product.split(', ').filter(Boolean);
-            const newProducts = data.product.split(', ').filter(Boolean);
-            const mergedProducts = Array.from(new Set([...existingProducts, ...newProducts])).join(', ');
+            // Rebuild the product string summary
+            const mergedProducts = Array.from(new Set(updatedItems.map(i => i.name))).join(', ');
 
-            const mergedRecord = {
+            const mergedRecord: UtangRecord = {
                 ...existingRecord,
                 items: updatedItems,
-                totalAmount: updatedTotal,
-                quantity: updatedQuantity,
-                product: mergedProducts
+                totalAmount: currency(existingRecord.totalAmount + data.totalAmount),
+                paidAmount: currency(existingRecord.paidAmount + (data.paidAmount || 0)),
+                quantity: existingRecord.quantity + data.quantity,
+                product: mergedProducts,
+                date: new Date().toISOString() // Update timestamp to latest activity
             };
 
             const updatedRecords = [...records];
             updatedRecords[existingRecordIndex] = mergedRecord;
 
-            return {
-                success: true,
-                updatedInventory: newInventory,
-                updatedRecords: updatedRecords,
-                newRecord: mergedRecord,
-                shouldPrint: !!data.shouldPrint
-            };
+            return { success: true, updatedInventory: newInventory, updatedRecords: updatedRecords, newRecord: mergedRecord };
         }
     }
 
-    // Insert New Record
-    const newRecord = {
-        ...data,
+    // 3. New Transaction Creation
+    const newRecord: UtangRecord = {
         id: crypto.randomUUID(),
-        date: new Date().toLocaleString(),
-        branchId: 'default'
+        refId: generateRefId(),
+        customerName: data.customerName,
+        product: data.items.map((i: any) => i.name).join(', '),
+        items: data.items,
+        quantity: data.items.reduce((s: number, i: any) => s + i.quantity, 0),
+        totalAmount: currency(data.totalAmount),
+        paidAmount: currency(data.paidAmount || 0),
+        date: new Date().toISOString(),
+        isPaid: data.isPaid
     };
 
-    return {
-        success: true,
-        updatedInventory: newInventory,
-        updatedRecords: [newRecord, ...records],
-        newRecord: newRecord,
-        shouldPrint: !!data.shouldPrint
+    return { 
+        success: true, 
+        updatedInventory: newInventory, 
+        updatedRecords: [newRecord, ...records], 
+        newRecord 
     };
   },
 
-  deleteTransaction: (
-    recordId: string,
-    inventory: InventoryItem[],
-    records: UtangRecord[]
-  ): TransactionResult => {
-    const recordToDelete = records.find(r => r.id === recordId);
-    if (!recordToDelete) {
-        return { success: false, updatedInventory: inventory, updatedRecords: records, error: "Record not found" };
-    }
+  /**
+   * Calculates actual cash profit vs potential
+   */
+  calculateMargin: (item: UtangItem) => {
+    if (!item.cost) return 0;
+    const profit = item.price - item.cost;
+    return currency((profit / item.price) * 100);
+  },
 
-    const newInventory = [...inventory];
-
-    recordToDelete.items.forEach(item => {
-        if (item.productId) {
-            const idx = newInventory.findIndex(i => i.id === item.productId);
-            if (idx >= 0) {
-                newInventory[idx] = {
-                    ...newInventory[idx],
-                    stock: newInventory[idx].stock + item.quantity
-                };
-            }
-        }
+  /**
+   * Handles payment towards a debt record
+   */
+  settleDebt: (record: UtangRecord, amount: number, records: UtangRecord[]): UtangRecord[] => {
+    return records.map(r => {
+      if (r.id === record.id) {
+        const newPaidAmount = currency(r.paidAmount + amount);
+        const isFullyPaid = newPaidAmount >= currency(r.totalAmount);
+        return {
+          ...r,
+          paidAmount: Math.min(newPaidAmount, r.totalAmount),
+          isPaid: isFullyPaid
+        };
+      }
+      return r;
     });
-
-    const updatedRecords = records.filter(r => r.id !== recordId);
-
-    return {
-        success: true,
-        updatedInventory: newInventory,
-        updatedRecords: updatedRecords
-    };
   }
 };

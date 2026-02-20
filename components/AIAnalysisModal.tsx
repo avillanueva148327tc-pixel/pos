@@ -1,5 +1,1 @@
-
-// AI modal has been removed
-import React from 'react';
-const AIAnalysisModal = () => null;
-export default AIAnalysisModal;
+// This component has been removed as AI functionality is no longer part of the application.

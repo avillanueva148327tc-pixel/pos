@@ -97,7 +97,7 @@ const CustomerQRModal: React.FC<CustomerQRModalProps> = ({ customer, branch, onC
                 <div className="mt-4 flex gap-4 text-[7px] font-black uppercase tracking-tighter">
                    <div>
                      <p className="opacity-30">Member Since</p>
-                     <p>{customer.createdAt.split(',')[0]}</p>
+                     <p>{new Date(customer.createdAt).toLocaleDateString()}</p>
                    </div>
                    <div>
                      <p className="opacity-30">Account ID</p>

@@ -90,7 +90,7 @@ const CustomerHistoryModal: React.FC<CustomerHistoryModalProps> = ({
                  <div className="flex-1 min-w-0 pr-4">
                     <div className="flex items-center gap-2 mb-1">
                        <span className={`w-2 h-2 rounded-full ${record.isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                       <p className="font-bold text-xs text-white truncate">{record.date}</p>
+                       <p className="font-bold text-xs text-white truncate">{new Date(record.date).toLocaleString()}</p>
                     </div>
                     <p className="text-[10px] text-slate-400 uppercase truncate group-hover:text-slate-300 transition">
                        {record.quantity} Items • {record.product}

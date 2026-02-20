@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryItem, BatchRecord, UserRole } from '../types';
 import BarcodeScanner, { ScanResultStatus } from './BarcodeScanner';
+import { SearchService } from '../services/searchService';
 
 interface AddBatchModalProps {
   inventory: InventoryItem[];
@@ -10,8 +11,17 @@ interface AddBatchModalProps {
   userRole?: UserRole;
 }
 
+type BatchItem = { 
+  productId?: string; 
+  name: string; 
+  quantity: string; 
+  costPerUnit: string; 
+  currentStock?: number; 
+  type: 'stock' | 'expense';
+};
+
 const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, onClose, onCreateNewItem, userRole = 'cashier' }) => {
-  const [items, setItems] = useState<{ productId?: string; name: string; quantity: number; costPerUnit: number; currentStock?: number; type: 'stock' | 'expense' }[]>([]);
+  const [items, setItems] = useState<BatchItem[]>([]);
   const [note, setNote] = useState('');
   const [totalCostOverride, setTotalCostOverride] = useState<string>('');
   const [productSearch, setProductSearch] = useState('');
@@ -21,7 +31,7 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
   const isAdmin = userRole === 'admin';
 
   // Calculate total from items
-  const calculatedTotal = useMemo(() => items.reduce((sum, item) => sum + (item.quantity * item.costPerUnit), 0), [items]);
+  const calculatedTotal = useMemo(() => items.reduce((sum, item) => sum + ((parseFloat(item.quantity) || 0) * (parseFloat(item.costPerUnit) || 0)), 0), [items]);
   
   // Use override if provided, otherwise calculated
   const finalTotalCost = totalCostOverride ? parseFloat(totalCostOverride) : calculatedTotal;
@@ -29,8 +39,8 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
   const filteredInventory = useMemo(() => {
     if (!productSearch) return inventory.slice(0, 10);
     return inventory.filter(i => 
-      i.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-      (i.barcode && i.barcode.includes(productSearch))
+      SearchService.fuzzyMatch(productSearch, i.name) || 
+      (i.barcode && i.barcode.toLowerCase().includes(productSearch.toLowerCase()))
     ).slice(0, 10);
   }, [inventory, productSearch]);
 
@@ -38,14 +48,14 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
     const existing = items.findIndex(i => i.productId === product.id);
     if (existing >= 0) {
       const newItems = [...items];
-      newItems[existing].quantity += 1;
+      newItems[existing].quantity = String((parseFloat(newItems[existing].quantity) || 0) + 1);
       setItems(newItems);
     } else {
       setItems([...items, { 
         productId: product.id, 
         name: product.name, 
-        quantity: 1, 
-        costPerUnit: product.originalPrice || 0,
+        quantity: '1', 
+        costPerUnit: String(product.originalPrice || 0),
         currentStock: product.stock,
         type: 'stock'
       }]);
@@ -57,21 +67,30 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
     if (!productSearch) return;
     setItems([...items, {
       name: productSearch,
-      quantity: 1,
-      costPerUnit: 0,
+      quantity: '1',
+      costPerUnit: '0',
       type: 'expense'
     }]);
     setProductSearch('');
   };
-
-  const updateItem = (index: number, field: string, value: number) => {
+  
+  const handleItemChange = (index: number, field: 'quantity' | 'costPerUnit', value: string) => {
+    if (value !== '' && !/^\d*\.?\d*$/.test(value)) {
+      return; // Prevent invalid characters
+    }
     const newItems = [...items];
-    (newItems[index] as any)[field] = value;
+    newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
 
   const removeItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+  };
+  
+  const handleNumericInput = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+        setter(value);
+    }
   };
 
   const handleBarcodeScan = (code: string) => {
@@ -89,12 +108,9 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
     // Generate ISO date with current time for accurate history tracking
     const now = new Date();
     const [y, m, d] = date.split('-').map(Number);
-    now.setFullYear(y, m - 1, d);
+    now.setUTCFullYear(y, m - 1, d);
     
-    const timestamp = now.toLocaleString('en-US', { 
-      year: 'numeric', month: 'short', day: 'numeric', 
-      hour: 'numeric', minute: '2-digit', hour12: true 
-    });
+    const timestamp = now.toISOString();
 
     onAddBatch({
       date: timestamp,
@@ -103,8 +119,8 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
       items: items.map(i => ({
         productId: i.type === 'stock' ? i.productId : undefined,
         name: i.name,
-        quantity: i.quantity,
-        costPerUnit: i.costPerUnit
+        quantity: parseFloat(i.quantity) || 0,
+        costPerUnit: parseFloat(i.costPerUnit) || 0
       }))
     });
     onClose();
@@ -149,11 +165,11 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
                      <div className="flex items-center gap-2">
                         <span className="text-xl font-bold text-emerald-500">₱</span>
                         <input 
-                          type="number" 
-                          step="any"
+                          type="text" 
+                          inputMode="decimal"
                           placeholder={calculatedTotal > 0 ? calculatedTotal.toString() : "0.00"}
                           value={totalCostOverride} 
-                          onChange={e => setTotalCostOverride(e.target.value)} 
+                          onChange={e => handleNumericInput(e.target.value, setTotalCostOverride)} 
                           className="w-full bg-transparent text-3xl font-black text-white outline-none placeholder:text-white/20" 
                         />
                      </div>
@@ -179,7 +195,7 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
                                   <span className="text-xs font-bold text-white truncate block">{item.name}</span>
                                   {item.type === 'stock' && (
                                     <span className="text-[9px] text-emerald-400 font-mono">
-                                      Stock: {item.currentStock || 0} → <b className="text-white">{(item.currentStock || 0) + item.quantity}</b>
+                                      Stock: {item.currentStock || 0} → <b className="text-white">{(item.currentStock || 0) + (parseFloat(item.quantity) || 0)}</b>
                                     </span>
                                   )}
                                   {item.type === 'expense' && <span className="text-[9px] text-amber-500 font-mono">Expense Record Only</span>}
@@ -190,12 +206,12 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
                           <div className="grid grid-cols-2 gap-2">
                              <div className="flex items-center gap-2 bg-[#1e293b] rounded-lg px-2 py-1 border border-white/5">
                                <span className="text-[9px] text-slate-500 font-bold uppercase">Qty</span>
-                               <input type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value))} className="w-full bg-transparent text-xs font-bold text-white outline-none text-right" />
+                               <input type="text" inputMode="decimal" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', e.target.value)} className="w-full bg-transparent text-xs font-bold text-white outline-none text-right" />
                              </div>
                              {isAdmin && (
                                <div className="flex items-center gap-2 bg-[#1e293b] rounded-lg px-2 py-1 border border-white/5">
                                  <span className="text-[9px] text-slate-500 font-bold uppercase">Cost Each</span>
-                                 <input type="number" value={item.costPerUnit} onChange={e => updateItem(idx, 'costPerUnit', parseFloat(e.target.value))} className="w-full bg-transparent text-xs font-bold text-white outline-none text-right" placeholder="0.00" />
+                                 <input type="text" inputMode="decimal" value={item.costPerUnit} onChange={e => handleItemChange(idx, 'costPerUnit', e.target.value)} className="w-full bg-transparent text-xs font-bold text-white outline-none text-right" placeholder="0.00" />
                                </div>
                              )}
                           </div>

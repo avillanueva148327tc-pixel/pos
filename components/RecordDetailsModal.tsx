@@ -12,18 +12,37 @@ interface RecordDetailsModalProps {
 const RecordDetailsModal: React.FC<RecordDetailsModalProps> = ({ record, onClose, onAction, isAdmin = false }) => {
   const balance = Math.max(0, parseFloat((record.totalAmount - record.paidAmount).toFixed(2)));
 
-  // Improved Grouping Logic for chronological sessions
+  // New Grouping Logic: Group items into "sessions" based on timestamp proximity
   const groupedItems = useMemo(() => {
-    const groups: Record<string, UtangItem[]> = {};
-    record.items.forEach(item => {
-      // Input formats: "Oct 27, 2024, 2:30 PM" or "2024-10-27"
-      // Extract the date part (before the time comma)
-      const datePart = item.date.includes(',') ? item.date.split(',').slice(0, 2).join(',') : (item.date || 'Historical');
-      if (!groups[datePart]) groups[datePart] = [];
-      groups[datePart].push(item);
-    });
-    // Sort groups by date descending
-    return Object.entries(groups).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime());
+    if (!record.items || record.items.length === 0) return [];
+
+    const sortedItems = [...record.items].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const groups: { date: Date; items: UtangItem[] }[] = [];
+    if (sortedItems.length === 0) return [];
+
+    let currentGroup: { date: Date; items: UtangItem[] } = {
+      date: new Date(sortedItems[0].date),
+      items: [sortedItems[0]],
+    };
+    groups.push(currentGroup);
+
+    const SESSION_GAP_SECONDS = 60; // Group items added within 1 minute of each other
+
+    for (let i = 1; i < sortedItems.length; i++) {
+      const currentItem = sortedItems[i];
+      const prevItemDate = new Date(currentGroup.items[currentGroup.items.length - 1].date);
+      const currentItemDate = new Date(currentItem.date);
+      const diffInSeconds = (currentItemDate.getTime() - prevItemDate.getTime()) / 1000;
+
+      if (diffInSeconds < SESSION_GAP_SECONDS) {
+        currentGroup.items.push(currentItem);
+      } else {
+        currentGroup = { date: currentItemDate, items: [currentItem] };
+        groups.push(currentGroup);
+      }
+    }
+    
+    return groups.sort((a, b) => b.date.getTime() - a.date.getTime()); // Newest first
   }, [record.items]);
 
   return (
@@ -65,23 +84,32 @@ const RecordDetailsModal: React.FC<RecordDetailsModalProps> = ({ record, onClose
           </div>
 
           <div className="space-y-6">
-             <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Detailed Transaction History</h5>
-             <div className="space-y-8">
-                {groupedItems.map(([date, items]) => (
-                  <div key={date} className="space-y-2">
-                    <div className="flex items-center gap-2 px-1 mb-3">
-                      <span className="text-[8px] font-black text-[#6366f1] px-2 py-0.5 bg-[#6366f1]/10 rounded-md uppercase tracking-widest">{date}</span>
-                      <div className="h-px flex-1 bg-white/5"></div>
+             <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Receipt Catalog</h5>
+             <div className="space-y-4">
+                {groupedItems.map((group, groupIndex) => (
+                  <div key={groupIndex} className="bg-[#1e293b] p-4 rounded-2xl border border-white/5 animate-in fade-in duration-300">
+                    <div className="flex justify-between items-center mb-3 pb-3 border-b border-white/10">
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                        {new Date(group.date).toLocaleString('en-US', { 
+                          month: 'short', day: 'numeric', year: 'numeric',
+                          hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true 
+                        })}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase">
+                        Subtotal: <span className="text-white font-black">₱{group.items.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}</span>
+                      </p>
                     </div>
-                    {items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-4 bg-[#1e293b] rounded-2xl border border-white/5 shadow-sm">
-                        <div className="flex-1 min-w-0 pr-4">
-                          <p className="font-extrabold text-xs uppercase truncate text-white">{item.name}</p>
-                          <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">₱{item.price.toFixed(2)} x {item.quantity} {item.unit || 'pc'}</p>
+                    <div className="space-y-2">
+                      {group.items.map((item, itemIndex) => (
+                        <div key={itemIndex} className="flex justify-between items-center px-2 py-1">
+                          <div className="flex-1 min-w-0 pr-4">
+                            <p className="font-extrabold text-xs uppercase truncate text-white">{item.name}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">₱{item.price.toFixed(2)} x {item.quantity} {item.unit || 'pc'}</p>
+                          </div>
+                          <p className="font-black text-sm text-white tabular-nums">₱{(item.price * item.quantity).toFixed(2)}</p>
                         </div>
-                        <p className="font-black text-sm text-white tabular-nums">₱{(item.price * item.quantity).toFixed(2)}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 ))}
              </div>

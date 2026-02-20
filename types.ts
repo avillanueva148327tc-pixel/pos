@@ -1,4 +1,3 @@
-
 export type UserRole = 'admin' | 'cashier';
 
 export interface User {
@@ -60,10 +59,16 @@ export interface AppSettings {
   autoPrintReceipt: boolean;
   requireAdminApproval: boolean;
   showFinancialPulseOnDashboard: boolean;
+  enableAiScanner: boolean;
+  autoLockMinutes: 0 | 5 | 15 | 30;
+  dataPruning?: {
+    autoDelete: boolean;
+    deleteAfterDays: 90 | 180 | 365;
+  };
   auth: AuthConfig;
   receiptTemplate: ReceiptTemplate;
   uiCustomization: {
-    fontFamily: 'Inter' | 'Roboto' | 'Poppins' | 'Lora' | 'JetBrains Mono';
+    fontFamily: 'Inter' | 'Roboto' | 'Poppins' | 'JetBrains Mono';
     fontSize: 'sm' | 'base' | 'lg' | 'xl';
     compactMode: boolean;
     deviceMode: 'mobile' | 'tablet' | 'desktop';
@@ -106,8 +111,8 @@ export interface UtangItem {
   name: string;
   quantity: number;
   price: number;
-  cost?: number; // Added for profit tracking on manual items
-  itemsPerPack?: number; // Added for pack tracking on manual items
+  cost?: number;
+  itemsPerPack?: number;
   volume?: string;
   unit?: MeasurementUnit;
   measurementValue?: number;
@@ -118,6 +123,7 @@ export type ReminderFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
 
 export interface UtangRecord {
   id: string;
+  refId?: string; // Human-readable reference (e.g. TR-902)
   customerName: string;
   product: string;
   items: UtangItem[];
@@ -158,6 +164,7 @@ export interface Stats {
   monthlySales: number;
   monthlyExpenses: number;
   monthlyNetProfit: number;
+  debtRatio: number; // Percentage of inventory value tied in debt
 }
 
 export interface CashMovement {
@@ -175,13 +182,22 @@ export interface ShiftRecord {
   openedBy: string;
   closedBy?: string;
   startingCash: number;
-  cashSales: number; // accumulated from POS transactions
-  movements: CashMovement[]; // manual add/remove
+  cashSales: number;
+  movements: CashMovement[];
   expectedTotal: number;
   actualTotal?: number;
   discrepancy?: number;
   status: 'open' | 'closed';
   note?: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  details: string;
+  type: 'info' | 'warning' | 'critical';
 }
 
 export interface BackupData {
@@ -198,7 +214,8 @@ export interface BackupData {
     batches?: BatchRecord[];
     settings?: AppSettings;
     branch?: BranchConfig;
-    shifts?: ShiftRecord[]; // Added for backup support
+    shifts?: ShiftRecord[];
+    logs?: ActivityLog[];
   };
 }
 

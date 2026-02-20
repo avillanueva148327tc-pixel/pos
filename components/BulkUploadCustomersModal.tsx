@@ -1,14 +1,12 @@
-
 import React, { useState, useRef } from 'react';
-import { InventoryItem } from '../types';
+import { Customer } from '../types';
 
-interface BulkUploadModalProps {
-  onAdd: (items: Omit<InventoryItem, 'id'>[]) => void;
+interface BulkUploadCustomersModalProps {
+  onAdd: (customers: Omit<Customer, 'id' | 'createdAt'>[]) => void;
   onClose: () => void;
-  categories: string[];
 }
 
-// Robust CSV parser (State Machine) to handle quoted fields and commas
+// Robust CSV parser
 const parseCSV = (text: string): string[][] => {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -22,7 +20,7 @@ const parseCSV = (text: string): string[][] => {
     if (inQuotes) {
       if (char === '"' && nextChar === '"') {
         currentField += '"';
-        i++; // Skip escaped quote
+        i++;
       } else if (char === '"') {
         inQuotes = false;
       } else {
@@ -52,9 +50,8 @@ const parseCSV = (text: string): string[][] => {
   return rows.filter(row => row.length > 1 || (row.length === 1 && row[0]));
 };
 
-
-const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onAdd, onClose, categories }) => {
-  const [items, setItems] = useState<Omit<InventoryItem, 'id'>[]>([]);
+const BulkUploadCustomersModal: React.FC<BulkUploadCustomersModalProps> = ({ onAdd, onClose }) => {
+  const [customers, setCustomers] = useState<Omit<Customer, 'id' | 'createdAt'>[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -85,49 +82,40 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onAdd, onClose, categ
       const colMap: Record<string, number> = {};
       header.forEach((h, i) => { colMap[h] = i; });
 
-      // Validate required columns
       if (colMap['name'] === undefined) throw new Error("Missing required header: 'name'");
       
-      const parsedItems: Omit<InventoryItem, 'id'>[] = [];
+      const parsedCustomers: Omit<Customer, 'id' | 'createdAt'>[] = [];
 
       for (const row of dataRows) {
         const name = row[colMap['name']];
-        if (!name) continue; // Skip rows without a name
+        if (!name) continue;
 
-        const category = row[colMap['category']];
-        const stock = row[colMap['stock']];
-        const price = row[colMap['retail_price']] || row[colMap['price']];
-        const costPrice = row[colMap['cost_price']] || row[colMap['cost']];
-        const reorder = row[colMap['reorder_level']] || row[colMap['reorder']];
-        const expiry = row[colMap['expiry_date']] || row[colMap['expiry']];
-        const barcode = row[colMap['barcode']];
-        const unit = row[colMap['unit']];
-        
-        const validCategory = category && categories.includes(category) ? category : 'Others';
-        const retailPrice = parseFloat(price) || 0;
-        const originalPrice = parseFloat(costPrice) || retailPrice * 0.85;
+        const nickname = row[colMap['nickname']] || '';
+        const department = row[colMap['department']] || '';
+        const contact = row[colMap['contact']] || '';
+        const address = row[colMap['address']] || '';
+        const creditLimit = parseFloat(row[colMap['credit_limit']] || row[colMap['limit']]) || 0;
+        const idCode = row[colMap['id_code']] || row[colMap['barcode']] || '';
 
-        parsedItems.push({
+        parsedCustomers.push({
           name,
-          category: validCategory,
-          stock: parseInt(stock) || 0,
-          price: retailPrice,
-          originalPrice: originalPrice,
-          reorderLevel: parseInt(reorder) || 5,
-          expiryDate: expiry || undefined,
-          barcode: barcode || undefined,
-          unit: (unit as any) || 'pc'
+          nickname,
+          department,
+          contact,
+          address,
+          creditLimit,
+          barcode: idCode
         });
       }
 
-      if (parsedItems.length === 0) {
-        setError("No valid items found in CSV. Check column headers and data.");
+      if (parsedCustomers.length === 0) {
+        setError("No valid customers found in CSV.");
       } else {
-        setItems(parsedItems);
+        setCustomers(parsedCustomers);
         setError(null);
       }
     } catch (err: any) {
-      setError(`Parsing error: ${err.message}. Ensure headers like 'name', 'stock', 'price' exist.`);
+      setError(`Parsing error: ${err.message}. Ensure headers like 'name' exist.`);
     }
   };
 
@@ -136,8 +124,8 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onAdd, onClose, categ
       <div className="bg-white dark:bg-slate-800 w-full max-w-3xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
           <div>
-            <h3 className="text-2xl font-black">Bulk Inventory Import</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Efficiently restock your shelves</p>
+            <h3 className="text-2xl font-black">Bulk Customer Import</h3>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Onboard your suki base faster</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -145,46 +133,46 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onAdd, onClose, categ
         </div>
         
         <div className="p-8 overflow-y-auto flex-1 bg-slate-50/30 dark:bg-slate-900/10">
-          {items.length === 0 ? (
+          {customers.length === 0 ? (
             <div 
               onClick={() => fileInputRef.current?.click()}
               className="border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[32px] p-16 text-center hover:border-primary/50 hover:bg-white dark:hover:bg-slate-800/50 transition-all cursor-pointer group"
             >
-              <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                <span className="text-4xl text-primary">📊</span>
+              <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                <span className="text-4xl">👥</span>
               </div>
-              <p className="text-lg font-black text-slate-700 dark:text-slate-200">Select Inventory CSV</p>
-              <p className="text-xs text-slate-400 mt-2 font-medium">Download template or use your own .csv file</p>
+              <p className="text-lg font-black text-slate-700 dark:text-white uppercase tracking-tight">Select Customer CSV</p>
+              <p className="text-xs text-slate-400 mt-2 font-medium">Headers: name, nickname, department, contact, address, credit_limit, id_code</p>
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".csv" className="hidden" />
             </div>
           ) : (
             <div className="space-y-6">
               <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 flex justify-between items-center">
-                <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{items.length} items detected</p>
-                <button onClick={() => setItems([])} className="text-[10px] font-black text-rose-500 hover:underline">Clear List</button>
+                <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{customers.length} sukis detected</p>
+                <button onClick={() => setCustomers([])} className="text-[10px] font-black text-rose-500 hover:underline uppercase">Clear List</button>
               </div>
               <div className="border border-slate-100 dark:border-slate-700 rounded-3xl overflow-hidden shadow-sm bg-white dark:bg-slate-800">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-400 uppercase text-[10px] font-black">
                     <tr>
-                      <th className="px-6 py-4">Item</th>
-                      <th className="px-6 py-4 text-right">Retail</th>
-                      <th className="px-6 py-4 text-right">Stock</th>
+                      <th className="px-6 py-4">Name</th>
+                      <th className="px-6 py-4">Dept</th>
+                      <th className="px-6 py-4 text-right">Limit</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                    {items.slice(0, 50).map((item, idx) => (
+                    {customers.slice(0, 50).map((c, idx) => (
                       <tr key={idx}>
-                        <td className="px-6 py-4 font-bold truncate max-w-[200px]">{item.name}</td>
-                        <td className="px-6 py-4 text-right font-black text-primary">₱{item.price.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-right font-black">{item.stock}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white uppercase truncate max-w-[150px]">{c.name}</td>
+                        <td className="px-6 py-4 text-slate-500 uppercase">{c.department || '-'}</td>
+                        <td className="px-6 py-4 text-right font-black text-emerald-500">₱{c.creditLimit.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {items.length > 50 && (
+                {customers.length > 50 && (
                   <div className="p-4 bg-slate-50 dark:bg-slate-900/50 text-center text-[10px] font-bold text-slate-400 italic">
-                    And {items.length - 50} more items...
+                    And {customers.length - 50} more...
                   </div>
                 )}
               </div>
@@ -200,13 +188,13 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onAdd, onClose, categ
         </div>
         
         <div className="p-8 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 flex gap-4">
-          <button onClick={onClose} className="flex-1 py-4 rounded-2xl border-2 border-slate-100 dark:border-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition">Cancel</button>
+          <button onClick={onClose} className="flex-1 py-4 rounded-2xl border-2 border-slate-100 dark:border-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition">Cancel</button>
           <button 
-            disabled={items.length === 0}
-            onClick={() => { onAdd(items); onClose(); }}
-            className="flex-[2] py-4 rounded-2xl bg-primary text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
+            disabled={customers.length === 0}
+            onClick={() => onAdd(customers)}
+            className="flex-[2] py-4 rounded-2xl bg-indigo-500 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
           >
-            Import Inventory
+            Import Suki List
           </button>
         </div>
       </div>
@@ -214,4 +202,4 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onAdd, onClose, categ
   );
 };
 
-export default BulkUploadModal;
+export default BulkUploadCustomersModal;

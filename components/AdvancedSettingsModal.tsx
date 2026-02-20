@@ -1,412 +1,187 @@
-
-import React, { useState, useEffect } from 'react';
-import { AppSettings, QuickPickItem } from '../types';
+import React, { useState } from 'react';
+import { AppSettings, UserRole } from '../types';
 
 interface AdvancedSettingsModalProps {
   onClose: () => void;
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   onOpenReceiptStudio: () => void;
+  onOpenCustomerCatalog: () => void;
+  onRequestPrune: () => void;
+  userRole?: UserRole;
 }
 
-const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, settings, setSettings, onOpenReceiptStudio }) => {
+const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ 
+  onClose, settings, setSettings, userRole = 'cashier' 
+}) => {
   const [newCategory, setNewCategory] = useState('');
   const [showAdminPin, setShowAdminPin] = useState(false);
   const [showCashierPin, setShowCashierPin] = useState(false);
+  const isAdmin = userRole === 'admin';
   
-  // Local state for Quick Picks to handle editing without jitter
-  const [localQuickPicks, setLocalQuickPicks] = useState<QuickPickItem[]>(settings.quickPicks);
-
-  useEffect(() => {
-    setLocalQuickPicks(settings.quickPicks);
-  }, [settings.quickPicks]);
-
   const handleAddCategory = () => {
-    if (newCategory.trim() && !settings.categories.includes(newCategory.trim())) {
-      setSettings(prev => ({
-        ...prev,
-        categories: [...prev.categories, newCategory.trim()]
-      }));
+    if (!isAdmin) return;
+    const cat = newCategory.trim();
+    if (cat && !settings.categories.includes(cat)) {
+      setSettings(prev => ({ ...prev, categories: [...prev.categories, cat] }));
       setNewCategory('');
     }
   };
 
   const handleRemoveCategory = (cat: string) => {
-    if (settings.categories.length <= 1) {
-      alert("You must have at least one category.");
-      return;
-    }
-    if (window.confirm(`Remove category "${cat}"? Items in this category will remain unchanged but you won't be able to select this category for new items.`)) {
-        setSettings(prev => ({
-            ...prev,
-            categories: prev.categories.filter(c => c !== cat)
-        }));
+    if (!isAdmin || settings.categories.length <= 1) return;
+    if (window.confirm(`Expunge category "${cat}"? This action cannot be undone.`)) {
+        setSettings(prev => ({ ...prev, categories: prev.categories.filter(c => c !== cat) }));
     }
   };
 
-  // Quick Pick Handlers
-  const handleUpdateQuickPick = (index: number, field: keyof QuickPickItem, value: string) => {
-    const updated = [...localQuickPicks];
-    updated[index] = { ...updated[index] }; // Copy
-    
-    if (field === 'price') {
-      // Allow empty string or decimals during typing
-      (updated[index] as any).price = value;
-    } else {
-      updated[index].name = value;
-    }
-    setLocalQuickPicks(updated);
+  const updateNumericSetting = (field: keyof AppSettings, val: string) => {
+    if (!isAdmin) return;
+    const num = parseFloat(val) || 0;
+    setSettings(prev => ({ ...prev, [field]: num }));
   };
 
-  const handleBlurQuickPickPrice = (index: number) => {
-    const updated = [...localQuickPicks];
-    updated[index] = { ...updated[index] };
-    const val = parseFloat((updated[index] as any).price);
-    updated[index].price = isNaN(val) ? 0 : val;
-    setLocalQuickPicks(updated);
-    saveQuickPicks(updated);
+  const updatePIN = (type: 'adminPin' | 'cashierPin', val: string) => {
+    if (!isAdmin) return;
+    const pin = val.replace(/[^0-9]/g, '').slice(0, 4);
+    setSettings(prev => ({ ...prev, auth: { ...prev.auth, [type]: pin } }));
   };
 
-  const handleSaveQuickPicksName = () => {
-    saveQuickPicks(localQuickPicks);
-  };
-
-  const handleAddQuickPick = () => {
-    const newList = [...localQuickPicks, { name: '', price: 0 }];
-    setLocalQuickPicks(newList);
-    saveQuickPicks(newList);
-  };
-
-  const handleRemoveQuickPick = (index: number) => {
-    const newList = localQuickPicks.filter((_, i) => i !== index);
-    setLocalQuickPicks(newList);
-    saveQuickPicks(newList);
-  };
-
-  const saveQuickPicks = (list: QuickPickItem[]) => {
-    // Sanitize prices to numbers before saving to settings
-    const sanitized = list.map(item => ({
-      name: item.name,
-      price: typeof item.price === 'string' ? (parseFloat(item.price) || 0) : item.price
-    }));
-    setSettings(prev => ({ ...prev, quickPicks: sanitized }));
-  };
-
-  const isSalesTargetEnabled = settings.dailySalesTarget > 0;
-
-  const toggleSalesTarget = () => {
-    if (isSalesTargetEnabled) {
-      setSettings(prev => ({ ...prev, dailySalesTarget: 0 }));
-    } else {
-      setSettings(prev => ({ ...prev, dailySalesTarget: 5000 }));
-    }
-  };
-
-  const labelStyle = "block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1";
-  const inputStyle = "w-full p-4 rounded-2xl bg-[#0f172a] border border-slate-700 text-xs font-bold text-white focus:ring-2 focus:ring-[#6366f1]/50 outline-none transition-all";
+  const inputContainer = "bg-[#020617] border border-slate-800 rounded-2xl flex items-center overflow-hidden focus-within:border-indigo-500/50 transition-all h-14 ring-1 ring-white/5 shadow-inner";
+  const inputEl = "w-full h-full px-4 bg-transparent text-white font-black text-xs outline-none placeholder:text-slate-700 disabled:opacity-30";
+  const blockTitle = "text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3 px-1";
 
   return (
-  <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[501] p-4 animate-in zoom-in duration-300">
-    <div className="w-full max-w-2xl bg-[#0f172a] rounded-[2.5rem] p-8 md:p-10 relative overflow-hidden shadow-2xl border border-white/10 max-h-[90vh] flex flex-col">
-      <div className="flex justify-between items-center mb-8 shrink-0">
-        <div>
-          <h2 className="text-2xl font-black tracking-tight text-white uppercase">System Config</h2>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">ADVANCED SETTINGS • LEVEL 2</p>
-        </div>
-        <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-rose-500 transition-colors">✕</button>
-      </div>
+  <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[501] p-4 animate-in fade-in duration-300">
+    <div className="w-full max-w-5xl bg-[#0f172a] rounded-[3rem] border border-white/5 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative">
+      
+      {/* Laser Border Accent */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
 
-      <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar flex-1">
-        
-        {/* Receipt Configuration Section */}
-        <div className="p-6 bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl border border-white/5 relative overflow-hidden group">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-[#6366f1]/10 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-[#6366f1]/20 transition"></div>
-           <label className={labelStyle}>Receipt Configuration</label>
-           <div className="flex items-center justify-between gap-4 relative z-10">
-              <div className="flex-1">
-                 <p className="text-xs font-bold text-white mb-1">Receipt Studio</p>
-                 <p className="text-[10px] text-slate-400">Customize header logo, font, layout, and footer messages.</p>
+      {/* Header Panel */}
+      <div className="p-8 md:p-10 flex justify-between items-center bg-[#0f172a] shrink-0 border-b border-white/5">
+        <div className="flex items-center gap-6">
+           <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-3xl ring-1 ring-indigo-500/30 shadow-lg shadow-indigo-500/5">🛠️</div>
+           <div>
+              <h2 className="text-2xl font-black tracking-tighter text-white uppercase">System <span className="text-indigo-500">Command</span></h2>
+              <div className="flex items-center gap-2 mt-1">
+                 <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Security Level 2 • Active Authorization</p>
               </div>
-              <button 
-                onClick={onOpenReceiptStudio}
-                className="px-6 py-3 bg-[#6366f1] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 transition"
-              >
-                Open Studio 🎨
-              </button>
            </div>
         </div>
+        <button onClick={onClose} className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-rose-500 transition-all active:scale-90 border border-white/5 text-xl">✕</button>
+      </div>
 
-        {/* Quick Picks Section */}
-        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
-          <div className="flex justify-between items-center mb-4">
-             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Quick Pick Shortcuts</label>
-             <button onClick={handleAddQuickPick} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-500 hover:text-white transition">
-                + Add Item
-             </button>
-          </div>
+      {/* Main Content Grid */}
+      <div className="flex-1 overflow-y-auto p-8 md:p-10 custom-scrollbar bg-[#020617]/40">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          <div className="space-y-2">
-             {localQuickPicks.length === 0 && (
-                <div className="text-center py-4 opacity-50 border border-dashed border-white/10 rounded-xl">
-                   <p className="text-[10px] text-slate-400 uppercase">No shortcuts defined</p>
+          {/* Left Rack: Logic & Categories */}
+          <div className="lg:col-span-7 space-y-8">
+            <section>
+              <h4 className={blockTitle}>Database Taxonomy</h4>
+              <div className="p-6 bg-[#1e293b]/30 rounded-[2.5rem] border border-white/5 space-y-6">
+                <div className="flex gap-2">
+                  <div className={`${inputContainer} flex-1`}>
+                    <input disabled={!isAdmin} placeholder="ENTER NEW CATEGORY LABEL..." className={inputEl} value={newCategory} onChange={e => setNewCategory(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddCategory()} />
+                  </div>
+                  <button onClick={handleAddCategory} disabled={!newCategory.trim() || !isAdmin} className="h-14 px-8 bg-indigo-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-30 transition shadow-lg shadow-indigo-500/20">Inject</button>
                 </div>
-             )}
-             {localQuickPicks.map((item, idx) => (
-                <div key={idx} className="flex gap-2">
-                   <input 
-                     className="flex-[2] bg-[#0f172a] rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#6366f1]"
-                     placeholder="Item Name"
-                     value={item.name}
-                     onChange={e => handleUpdateQuickPick(idx, 'name', e.target.value)}
-                     onBlur={handleSaveQuickPicksName}
-                   />
-                   <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">₱</span>
-                      <input 
-                        type="number"
-                        className="w-full bg-[#0f172a] rounded-xl border border-slate-700 pl-6 pr-3 py-2 text-xs font-bold text-white outline-none focus:border-[#6366f1]"
-                        placeholder="0"
-                        value={item.price}
-                        onChange={e => handleUpdateQuickPick(idx, 'price', e.target.value)}
-                        onBlur={() => handleBlurQuickPickPrice(idx)}
-                      />
-                   </div>
-                   <button 
-                     onClick={() => handleRemoveQuickPick(idx)}
-                     className="w-9 h-9 rounded-xl bg-white/5 text-slate-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition"
-                   >
-                     ✕
-                   </button>
+                <div className="flex flex-wrap gap-2">
+                  {settings.categories.map(cat => (
+                    <div key={cat} className="flex items-center gap-3 px-4 py-2.5 bg-[#020617] rounded-xl border border-white/5 group hover:border-indigo-500/30 transition-all">
+                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">{cat}</span>
+                        <button disabled={!isAdmin} onClick={() => handleRemoveCategory(cat)} className="text-slate-600 hover:text-rose-500 transition text-xs opacity-0 group-hover:opacity-100">✕</button>
+                    </div>
+                  ))}
                 </div>
-             ))}
-          </div>
-          <p className="text-[9px] text-slate-500 mt-3 px-1">
-             These items appear in the "Manual Entry" tab for fast access.
-          </p>
-        </div>
-
-        {/* Security Section */}
-        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
-          <label className={labelStyle}>Security Credentials</label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Admin PIN</span>
-              <div className="relative">
-                <input 
-                  type={showAdminPin ? "text" : "password"} 
-                  maxLength={4}
-                  className={`${inputStyle} tracking-[0.5em] text-center font-black text-lg`}
-                  value={settings.auth?.adminPin ?? ''}
-                  onChange={e => setSettings(prev => ({...prev, auth: { ...prev.auth, adminPin: e.target.value.replace(/[^0-9]/g, '') } }))}
-                  placeholder="1234"
-                />
-                <button 
-                  onClick={() => setShowAdminPin(!showAdminPin)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-lg text-slate-500 hover:text-white transition"
-                >
-                  {showAdminPin ? '🙈' : '👁️'}
-                </button>
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Cashier PIN</span>
-              <div className="relative">
-                <input 
-                  type={showCashierPin ? "text" : "password"} 
-                  maxLength={4}
-                  className={`${inputStyle} tracking-[0.5em] text-center font-black text-lg`}
-                  value={settings.auth?.cashierPin ?? ''}
-                  onChange={e => setSettings(prev => ({...prev, auth: { ...prev.auth, cashierPin: e.target.value.replace(/[^0-9]/g, '') } }))}
-                  placeholder="0000"
-                />
-                <button 
-                  onClick={() => setShowCashierPin(!showCashierPin)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-lg text-slate-500 hover:text-white transition"
-                >
-                  {showCashierPin ? '🙈' : '👁️'}
-                </button>
+            </section>
+
+            <section>
+              <h4 className={blockTitle}>Automation Parameters</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-6 bg-[#1e293b]/30 rounded-[2.5rem] border border-white/5">
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Expiry Proximity (Days)</span>
+                  <div className={inputContainer}>
+                     <input disabled={!isAdmin} type="number" className={`${inputEl} text-center text-lg`} value={settings.expiryThresholdDays} onChange={e => updateNumericSetting('expiryThresholdDays', e.target.value)} />
+                  </div>
+                </div>
+                <div className="p-6 bg-[#1e293b]/30 rounded-[2.5rem] border border-white/5">
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Stock Floor Alert</span>
+                  <div className={inputContainer}>
+                     <input disabled={!isAdmin} type="number" className={`${inputEl} text-center text-lg`} value={settings.lowStockThreshold} onChange={e => updateNumericSetting('lowStockThreshold', e.target.value)} />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <p className="text-[9px] text-slate-500 mt-4 px-1">
-            ⚠️ <b>Important:</b> Memorize these PINs. If you forget the Admin PIN, you will lose access to settings.
-          </p>
-        </div>
-
-        {/* Category Management Section */}
-        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
-          <label className={labelStyle}>Store Categories</label>
-          
-          <div className="flex gap-2 mb-4">
-             <input 
-               placeholder="ADD NEW CATEGORY..." 
-               className={inputStyle}
-               value={newCategory} 
-               onChange={e => setNewCategory(e.target.value)} 
-               onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
-             />
-             <button 
-               onClick={handleAddCategory}
-               disabled={!newCategory.trim()}
-               className="px-6 py-3 bg-[#6366f1] text-white rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-indigo-500 disabled:opacity-50 transition shadow-lg shadow-indigo-500/20"
-             >
-               Add
-             </button>
+            </section>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {settings.categories.map(cat => (
-               <div key={cat} className="flex items-center gap-2 pl-4 pr-2 py-2 bg-[#0f172a] border border-white/5 rounded-xl group hover:border-slate-600 transition">
-                  <span className="text-[10px] font-bold text-slate-300 uppercase">{cat}</span>
-                  <button 
-                    onClick={() => handleRemoveCategory(cat)}
-                    className="w-5 h-5 flex items-center justify-center rounded-full bg-white/5 text-slate-500 hover:bg-rose-500 hover:text-white transition"
-                  >
-                    ✕
-                  </button>
+          {/* Right Rack: Access & Security */}
+          <div className="lg:col-span-5 space-y-8">
+            <section>
+               <h4 className={blockTitle}>Security Protocols</h4>
+               <div className="p-8 bg-gradient-to-b from-[#1e293b]/50 to-[#0f172a]/50 rounded-[3rem] border border-indigo-500/10 space-y-8 relative">
+                  {!isAdmin && <div className="absolute inset-0 bg-[#020617]/60 backdrop-blur-[2px] z-10 rounded-[3rem] flex items-center justify-center p-8"><div className="bg-rose-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-2xl animate-pulse">Insufficient Clearance</div></div>}
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3">Master Override PIN (Level 2)</p>
+                      <div className="relative">
+                        <div className={inputContainer}>
+                          <input type={showAdminPin ? "text" : "password"} disabled={!isAdmin} maxLength={4} className={`${inputEl} tracking-[1.5em] text-center text-xl h-16 text-indigo-400`} value={settings.auth.adminPin} onChange={e => updatePIN('adminPin', e.target.value)} />
+                        </div>
+                        <button onClick={() => setShowAdminPin(!showAdminPin)} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-600 hover:text-white transition">{showAdminPin ? '🙈' : '👁️'}</button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3">Cashier Access PIN (Level 1)</p>
+                      <div className="relative">
+                        <div className={inputContainer}>
+                          <input type={showCashierPin ? "text" : "password"} disabled={!isAdmin} maxLength={4} className={`${inputEl} tracking-[1.5em] text-center text-xl h-16 text-indigo-400`} value={settings.auth.cashierPin} onChange={e => updatePIN('cashierPin', e.target.value)} />
+                        </div>
+                        <button onClick={() => setShowCashierPin(!showCashierPin)} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-600 hover:text-white transition">{showCashierPin ? '🙈' : '👁️'}</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-white/5">
+                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3">System Auto-Lockout</p>
+                    <select disabled={!isAdmin} className={`${inputContainer} w-full px-4 appearance-none text-white font-black text-[10px] uppercase tracking-widest cursor-pointer outline-none focus:border-indigo-500/50 transition-all`} value={settings.autoLockMinutes} onChange={e => setSettings(prev => ({...prev, autoLockMinutes: parseInt(e.target.value) as any}))}>
+                      <option value="0" className="bg-[#0f172a]">Disabled</option>
+                      <option value="5" className="bg-[#0f172a]">5 Minutes</option>
+                      <option value="15" className="bg-[#0f172a]">15 Minutes</option>
+                      <option value="30" className="bg-[#0f172a]">30 Minutes</option>
+                    </select>
+                  </div>
                </div>
-            ))}
-          </div>
-        </div>
+            </section>
 
-        {/* Business Goals Section */}
-        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
-          <div className="flex justify-between items-center mb-4">
-             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Sales Target</label>
-             <div onClick={toggleSalesTarget} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-colors ${isSalesTargetEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${isSalesTargetEnabled ? 'translate-x-5' : ''}`} />
-             </div>
-          </div>
-          
-          {isSalesTargetEnabled && (
-            <div className="animate-in slide-in-from-top-2 mb-6">
-              <div className="flex items-center gap-3 bg-[#0f172a] border border-slate-700 rounded-2xl px-4 py-3">
-                 <span className="text-xl">🎯</span>
-                 <span className="text-sm font-black text-emerald-500">₱</span>
-                 <input 
-                   type="number" 
-                   className="w-full bg-transparent text-xs font-bold text-white outline-none"
-                   value={settings.dailySalesTarget || ''}
-                   placeholder="Enter Amount"
-                   onChange={e => setSettings(prev => ({...prev, dailySalesTarget: parseFloat(e.target.value) || 0}))}
-                 />
+            <section>
+              <h4 className={blockTitle}>System Extension</h4>
+              <div className="p-6 bg-[#1e293b]/30 rounded-[2.5rem] border border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                     <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-xl ring-1 ring-white/5">✨</div>
+                     <div>
+                        <p className="text-xs font-black text-white uppercase leading-none">AI Neural Scanner</p>
+                        <p className="text-[9px] text-slate-500 mt-1 uppercase">Machine Learning Product Entry</p>
+                     </div>
+                  </div>
+                  <div onClick={() => isAdmin && setSettings(prev => ({...prev, enableAiScanner: !prev.enableAiScanner}))} className={`w-12 h-7 rounded-full p-1 cursor-pointer transition-all duration-300 ${settings.enableAiScanner ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.4)]' : 'bg-slate-800'}`}>
+                      <div className={`w-5 h-5 bg-white rounded-full shadow-lg transform transition-transform duration-300 ${settings.enableAiScanner ? 'translate-x-5' : ''}`} />
+                  </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Inventory Automation Section */}
-        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
-          <label className={labelStyle}>Inventory Automation</label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Expiry Alert Threshold (Days)</span>
-              <div className="flex items-center gap-3 bg-[#0f172a] border border-slate-700 rounded-2xl px-4 py-3">
-                 <span className="text-xl">📅</span>
-                 <input 
-                   type="number" 
-                   className="w-full bg-transparent text-xs font-bold text-white outline-none"
-                   value={settings.expiryThresholdDays}
-                   onChange={e => setSettings(prev => ({...prev, expiryThresholdDays: parseInt(e.target.value) || 30}))}
-                 />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Default Low Stock Level</span>
-              <div className="flex items-center gap-3 bg-[#0f172a] border border-slate-700 rounded-2xl px-4 py-3">
-                 <span className="text-xl">📉</span>
-                 <input 
-                   type="number" 
-                   className="w-full bg-transparent text-xs font-bold text-white outline-none"
-                   value={settings.lowStockThreshold}
-                   onChange={e => setSettings(prev => ({...prev, lowStockThreshold: parseInt(e.target.value) || 5}))}
-                 />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* UI Scaling Section */}
-        <div className="p-6 bg-[#1e293b] rounded-3xl border border-white/5">
-          <label className={labelStyle}>UI Customization</label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Font Family</span>
-              <select 
-                className={inputStyle}
-                value={settings.uiCustomization.fontFamily}
-                onChange={e => setSettings({...settings, uiCustomization: {...settings.uiCustomization, fontFamily: e.target.value as any}})}
-              >
-                <option value="Inter">Inter (Clean)</option>
-                <option value="Roboto">Roboto (Android)</option>
-                <option value="Poppins">Poppins (Modern)</option>
-                <option value="JetBrains Mono">JetBrains Mono (Code)</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Interface Font Size</span>
-              <select 
-                className={inputStyle}
-                value={settings.uiCustomization.fontSize}
-                onChange={e => setSettings({...settings, uiCustomization: {...settings.uiCustomization, fontSize: e.target.value as any}})}
-              >
-                <option value="sm">Small</option>
-                <option value="base">Standard</option>
-                <option value="lg">Large</option>
-                <option value="xl">Extra Large</option>
-              </select>
-            </div>
-            
-            <div className="space-y-2 md:col-span-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Display Density</span>
-              <button 
-                onClick={() => setSettings({...settings, uiCustomization: {...settings.uiCustomization, compactMode: !settings.uiCustomization.compactMode}})}
-                className={`w-full p-4 rounded-2xl border font-bold text-xs transition-all ${settings.uiCustomization.compactMode ? 'bg-[#6366f1] text-white border-transparent shadow-lg' : 'bg-[#0f172a] text-slate-400 border-slate-700 hover:text-white'}`}
-              >
-                {settings.uiCustomization.compactMode ? 'COMPACT MODE ACTIVE' : 'SWITCH TO COMPACT MODE'}
-              </button>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Device Mode</span>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'mobile', label: 'Mobile', icon: '📱' },
-                  { id: 'tablet', label: 'Tablet', icon: '📲' },
-                  { id: 'desktop', label: 'Computer', icon: '💻' },
-                ].map(mode => (
-                  <button
-                    key={mode.id}
-                    onClick={() => setSettings({
-                      ...settings, 
-                      uiCustomization: {
-                        ...settings.uiCustomization, 
-                        deviceMode: mode.id as 'mobile' | 'tablet' | 'desktop'
-                      }
-                    })}
-                    className={`p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${
-                      (settings.uiCustomization.deviceMode || 'desktop') === mode.id 
-                        ? 'bg-[#6366f1] text-white border-transparent shadow-lg' 
-                        : 'bg-[#0f172a] text-slate-500 border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-lg">{mode.icon}</span>
-                    <span className="text-[10px] font-black uppercase">{mode.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            </section>
           </div>
         </div>
       </div>
 
-      <div className="mt-6 pt-6 border-t border-white/5">
-        <button onClick={onClose} className="w-full py-5 bg-white text-[#0f172a] rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl hover:bg-slate-200 transition active:scale-95">
-          Save & Return
-        </button>
+      {/* Footer Actions */}
+      <div className="p-8 bg-[#0f172a] border-t border-white/5 flex gap-4 shrink-0">
+        <button onClick={onClose} className="flex-1 py-5 bg-white/5 text-slate-400 rounded-[1.5rem] font-black uppercase text-[11px] tracking-[0.2em] hover:bg-white/10 hover:text-white transition-all active:scale-95 border border-white/5">Cancel Session</button>
+        <button onClick={onClose} className="flex-[2] py-5 bg-indigo-500 text-white rounded-[1.5rem] font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-indigo-500/30 hover:bg-indigo-600 transition-all active:scale-95">Commit System Changes</button>
       </div>
     </div>
   </div>
