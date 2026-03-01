@@ -172,99 +172,193 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({ isOpen, onClose, inventory,
 
   return (
     <>
-      <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[150] p-4 animate-in fade-in">
-        <div className="bg-[#0f172a] w-full max-w-3xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-white/10 relative">
-          <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#0f172a] shrink-0">
-            <div>
-              <h3 className="text-xl font-black text-white tracking-tight">Debt Statement</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">NEW ACCOUNT ENTRY</p>
-            </div>
-            <button onClick={handleCloseAttempt} className="w-11 h-11 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-rose-500 transition-all border border-white/5 active:scale-90">✕</button>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-            {/* Customer */}
-            <div className="relative" ref={customerInputRef}>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Target Account *</label>
-              <div className="flex gap-2">
-                <input value={customerName} onChange={handleCustomerSearchChange} onFocus={() => customerName && setShowCustomerSuggestions(true)} className="w-full h-14 px-5 bg-[#1e293b] rounded-2xl border border-slate-700 text-xs font-bold outline-none focus:ring-2 focus:ring-[#6366f1]/50 transition-all text-white placeholder:text-slate-600" placeholder="Search Suki Member..." autoComplete="off" />
-                <button onClick={() => setScannerMode('customer')} className="flex-[0_0_56px] h-14 bg-[#1e293b] rounded-2xl flex items-center justify-center text-xl border border-slate-700 text-indigo-400 active:scale-95 transition-all">🪪</button>
-              </div>
-              {showCustomerSuggestions && customerSuggestions.length > 0 && (
-                <div className="absolute z-[160] w-full bg-[#1e293b] rounded-2xl shadow-2xl mt-2 overflow-hidden border border-white/10">
-                  {customerSuggestions.map(c => (
-                    <button key={c.id} onMouseDown={() => handleSelectCustomer(c)} className="w-full text-left px-5 py-4 text-xs font-bold text-white hover:bg-indigo-500 transition-colors border-b border-white/5 last:border-0">{c.name}</button>
-                  ))}
-                </div>
-              )}
-            </div>
+      <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center z-[150] p-4 animate-in fade-in duration-500">
+        <div className="bg-[#0f172a] w-full max-w-4xl h-[85vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-white/10 relative group">
+          {/* Background Glows */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full -mr-32 -mt-32 blur-[120px] group-hover:bg-indigo-500/15 transition-colors duration-1000"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-rose-500/5 rounded-full -ml-32 -mb-32 blur-[100px]"></div>
 
-            {/* Items */}
-            <div>
-              <div className="flex justify-between items-center mb-3 px-1">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Post Items *</label>
-                 {items.length > 0 && (
-                    <button onClick={() => setShowDiscardConfirm(true)} className="px-3 py-1 bg-rose-500/10 text-rose-500 rounded-lg text-[9px] font-black uppercase hover:bg-rose-500 hover:text-white transition-all">Clear Statement</button>
-                 )}
+          <div className="p-8 border-b border-white/5 flex justify-between items-start bg-[#0f172a]/50 backdrop-blur-md relative z-10">
+            <div className="space-y-1">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.4em]">Credit Ledger System</p>
               </div>
-              <div className="flex gap-2">
-                <input value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full h-14 px-5 bg-[#1e293b] rounded-2xl border border-slate-700 text-xs font-bold outline-none focus:ring-2 focus:ring-[#6366f1]/50 text-white placeholder:text-slate-600" placeholder="Search Inventory Catalog..." />
-                <button onClick={() => setScannerMode('product')} className="flex-[0_0_56px] h-14 bg-[#1e293b] rounded-2xl flex items-center justify-center text-xl border border-slate-700 text-indigo-400 active:scale-95 transition-all">📸</button>
-              </div>
-              {filteredInventory.length > 0 && (
-                <div className="mt-3 space-y-1.5">
-                  {filteredInventory.map(item => (
-                    <button key={item.id} onClick={() => handleAddItem(item)} className="w-full text-left p-4 bg-[#1e293b] hover:bg-slate-700 rounded-2xl text-xs font-bold text-white border border-white/5 transition-all flex justify-between items-center">
-                      <span className="uppercase truncate pr-4">{item.name}</span>
-                      <span className="text-indigo-400 shrink-0">₱{item.price.toFixed(2)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <h3 className="text-4xl font-black text-white tracking-tighter leading-none">Debt Statement</h3>
+              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.25em] mt-3 flex items-center gap-2">
+                <span className="opacity-50">●</span>
+                NEW ACCOUNT ENTRY
+              </p>
             </div>
-
-            {/* Cart */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Statement Summary ({items.length} SKUs)</h4>
-              {items.length === 0 ? (
-                <div className="text-center py-16 text-slate-500 border-2 border-dashed border-slate-800 rounded-[2.5rem] flex flex-col items-center gap-3">
-                    <span className="text-4xl opacity-20">📊</span>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em]">No items logged</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {items.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-4 p-4 bg-[#1e293b]/50 rounded-[1.5rem] border border-white/5 animate-in slide-in-from-right-1">
-                      <div className="flex-[1_1_0%] min-w-0">
-                        <p className="font-black text-xs uppercase truncate text-white leading-none">{item.name}</p>
-                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-2">Unit: ₱{item.price.toFixed(2)}</p>
-                      </div>
-                      <div className="flex-[0_0_auto] flex items-center gap-2 bg-[#0f172a] rounded-xl p-1 border border-white/10">
-                        <button onClick={() => updateQuantity(idx, -1)} className="w-8 h-8 rounded-lg text-slate-400 hover:bg-rose-500 hover:text-white transition-all text-sm flex items-center justify-center">-</button>
-                        <span className="w-7 text-center font-black text-[10px] tabular-nums text-white">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(idx, 1)} className="w-8 h-8 rounded-lg text-slate-400 hover:bg-indigo-500 hover:text-white transition-all text-sm flex items-center justify-center">+</button>
-                      </div>
-                      <p className="flex-[0_0_80px] font-black text-xs text-right tabular-nums text-white">₱{(item.price * item.quantity).toFixed(2)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="p-8 border-t border-white/5 bg-[#0f172a] shrink-0 space-y-6">
-            <div className="flex justify-between items-end">
-              <div>
-                 <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1 block">Account Total</span>
-                 <span className="text-4xl font-black tracking-tighter text-white tabular-nums">₱{totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-              </div>
-              <div className="text-right">
-                 <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">Pending Balance</p>
-              </div>
-            </div>
-            <button onClick={handleSaveDebt} disabled={items.length === 0 || !customerName} className="w-full h-16 bg-[#6366f1] text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-indigo-500/20 hover:bg-[#4f46e5] transition-all active:scale-[0.98] disabled:opacity-30 disabled:grayscale">
-              Process Account Debt
+            <button 
+              onClick={handleCloseAttempt} 
+              className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 hover:bg-rose-500 hover:text-white transition-all duration-300 border border-white/5 hover:border-rose-500/50 group/close"
+            >
+              <span className="text-xl group-hover/close:rotate-90 transition-transform duration-300">✕</span>
             </button>
+          </div>
+          
+          <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative z-10">
+            {/* Left: Search & Selection */}
+            <div className="w-full md:w-1/2 p-8 space-y-8 overflow-y-auto custom-scrollbar border-r border-white/5 bg-white/[0.02]">
+              {/* Customer */}
+              <div className="relative" ref={customerInputRef}>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 px-1">Target Account *</label>
+                <div className="flex gap-3">
+                  <div className="relative flex-1 group/input">
+                    <input 
+                      value={customerName} 
+                      onChange={handleCustomerSearchChange} 
+                      onFocus={() => customerName && setShowCustomerSuggestions(true)} 
+                      className="w-full h-16 px-6 bg-white/5 rounded-2xl border border-white/10 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-600" 
+                      placeholder="Search Suki Member..." 
+                      autoComplete="off" 
+                    />
+                    <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-indigo-500 transition-colors">🔍</div>
+                  </div>
+                  <button 
+                    onClick={() => setScannerMode('customer')} 
+                    className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-xl border border-white/10 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-all active:scale-90 shadow-lg shadow-indigo-500/0 hover:shadow-indigo-500/20"
+                  >
+                    🪪
+                  </button>
+                </div>
+                {showCustomerSuggestions && customerSuggestions.length > 0 && (
+                  <div className="absolute z-[160] w-full bg-[#1e293b] rounded-2xl shadow-2xl mt-3 overflow-hidden border border-white/10 animate-in slide-in-from-top-2 duration-300">
+                    {customerSuggestions.map(c => (
+                      <button 
+                        key={c.id} 
+                        onMouseDown={() => handleSelectCustomer(c)} 
+                        className="w-full text-left px-6 py-5 text-xs font-bold text-white hover:bg-indigo-500 transition-all border-b border-white/5 last:border-0 flex items-center justify-between group/item"
+                      >
+                        <span>{c.name}</span>
+                        <span className="text-[10px] opacity-0 group-hover/item:opacity-100 transition-opacity">SELECT →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Items */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center px-1">
+                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Post Items *</label>
+                   {items.length > 0 && (
+                      <button 
+                        onClick={() => setShowDiscardConfirm(true)} 
+                        className="text-[9px] font-black text-rose-500 uppercase tracking-widest hover:text-white transition-colors"
+                      >
+                        Clear Statement
+                      </button>
+                   )}
+                </div>
+                <div className="flex gap-3">
+                  <div className="relative flex-1 group/input">
+                    <input 
+                      value={productSearch} 
+                      onChange={e => setProductSearch(e.target.value)} 
+                      className="w-full h-16 px-6 bg-white/5 rounded-2xl border border-white/10 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-600" 
+                      placeholder="Search Inventory Catalog..." 
+                    />
+                    <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-indigo-500 transition-colors">📦</div>
+                  </div>
+                  <button 
+                    onClick={() => setScannerMode('product')} 
+                    className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-xl border border-white/10 text-indigo-400 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-all active:scale-90 shadow-lg shadow-indigo-500/0 hover:shadow-indigo-500/20"
+                  >
+                    📸
+                  </button>
+                </div>
+                {filteredInventory.length > 0 && (
+                  <div className="space-y-2 animate-in fade-in duration-300">
+                    {filteredInventory.map(item => (
+                      <button 
+                        key={item.id} 
+                        onClick={() => handleAddItem(item)} 
+                        className="w-full text-left p-5 bg-white/5 hover:bg-indigo-500/10 rounded-2xl text-xs font-bold text-white border border-white/5 hover:border-indigo-500/30 transition-all flex justify-between items-center group/prod"
+                      >
+                        <span className="uppercase truncate pr-4 group-hover:translate-x-1 transition-transform">{item.name}</span>
+                        <span className="text-indigo-400 shrink-0 font-black">₱{item.price.toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Statement Summary */}
+            <div className="w-full md:w-1/2 p-8 flex flex-col bg-[#0f172a]/30">
+              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Statement Summary</h4>
+                  <span className="text-[10px] font-black text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">{items.length} SKUs</span>
+                </div>
+
+                {items.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-white/5 rounded-[3rem] p-12 text-center space-y-4">
+                      <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center text-4xl opacity-20">📊</div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">No items logged</p>
+                        <p className="text-[8px] font-bold uppercase tracking-widest mt-2 opacity-50">Search or scan to begin entry</p>
+                      </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {items.map((item, idx) => (
+                      <div key={idx} className="group/cart flex items-center gap-5 p-5 bg-white/5 rounded-[2rem] border border-white/5 hover:border-white/10 transition-all animate-in slide-in-from-right-4 duration-300">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-xs uppercase truncate text-white leading-none mb-2">{item.name}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">Unit: ₱{item.price.toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 bg-[#0f172a] rounded-2xl p-1.5 border border-white/10 shadow-inner">
+                          <button 
+                            onClick={() => updateQuantity(idx, -1)} 
+                            className="w-10 h-10 rounded-xl text-slate-400 hover:bg-rose-500 hover:text-white transition-all text-lg flex items-center justify-center active:scale-90"
+                          >
+                            -
+                          </button>
+                          <span className="w-8 text-center font-black text-xs tabular-nums text-white">{item.quantity}</span>
+                          <button 
+                            onClick={() => updateQuantity(idx, 1)} 
+                            className="w-10 h-10 rounded-xl text-slate-400 hover:bg-indigo-500 hover:text-white transition-all text-lg flex items-center justify-center active:scale-90"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <div className="w-24 text-right">
+                          <p className="font-black text-sm tabular-nums text-white">₱{(item.price * item.quantity).toFixed(2)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="pt-8 mt-8 border-t border-white/5 space-y-8">
+                <div className="flex justify-between items-end">
+                  <div className="space-y-1">
+                     <span className="text-[9px] font-black uppercase text-slate-500 tracking-[0.3em] block">Account Total</span>
+                     <span className="text-5xl font-black tracking-tighter text-white tabular-nums leading-none">
+                       ₱{totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                     </span>
+                  </div>
+                  <div className="text-right">
+                     <p className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] bg-rose-500/10 px-4 py-2 rounded-full border border-rose-500/20 shadow-lg shadow-rose-500/10">Pending Balance</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleSaveDebt} 
+                  disabled={items.length === 0 || !customerName} 
+                  className="w-full h-20 bg-indigo-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] shadow-2xl shadow-indigo-500/40 hover:bg-indigo-500 hover:scale-[1.02] transition-all active:scale-[0.98] disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-4 group/submit"
+                >
+                  <span className="group-hover/submit:translate-x-1 transition-transform">Process Account Debt</span>
+                  <span className="text-xl">→</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -1,27 +1,25 @@
 import React from 'react';
-
-const Icon = ({ path, className = 'w-6 h-6' }: { path: string, className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d={path} />
-  </svg>
-);
-
-const DashboardIcon = () => <Icon path="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />;
-const InventoryIcon = () => <Icon path="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />;
-const CustomersIcon = () => <Icon path="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />;
-const RecordsIcon = () => <Icon path="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />;
-const ReportsIcon = () => <Icon path="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />;
-const SettingsIcon = () => <Icon path="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826 3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />;
-const LogsIcon = () => <Icon path="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />;
+import { 
+  LayoutDashboard, 
+  Terminal, 
+  Package, 
+  Users, 
+  FileText, 
+  TrendingUp, 
+  History, 
+  Settings,
+  Zap
+} from 'lucide-react';
 
 export const navItems = [
-  { id: 'pos', label: 'Terminal', icon: <DashboardIcon /> },
-  { id: 'inventory', label: 'Inventory', icon: <InventoryIcon /> },
-  { id: 'customers', label: 'Sukis', icon: <CustomersIcon /> },
-  { id: 'records', label: 'Debts', icon: <RecordsIcon /> },
-  { id: 'reports', label: 'Insights', icon: <ReportsIcon /> },
-  { id: 'logs', label: 'Audit Trail', icon: <LogsIcon /> },
-  { id: 'settings', label: 'Setup', icon: <SettingsIcon /> },
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+  { id: 'pos', label: 'Terminal', icon: <Terminal size={20} /> },
+  { id: 'inventory', label: 'Inventory', icon: <Package size={20} /> },
+  { id: 'customers', label: 'Sukis', icon: <Users size={20} /> },
+  { id: 'records', label: 'Debts', icon: <FileText size={20} /> },
+  { id: 'reports', label: 'Insights', icon: <TrendingUp size={20} /> },
+  { id: 'logs', label: 'Audit', icon: <History size={20} /> },
+  { id: 'settings', label: 'Setup', icon: <Settings size={20} /> },
 ];
 
 interface NavigationProps {
@@ -35,32 +33,56 @@ interface NavigationProps {
 export const DesktopSidebar: React.FC<NavigationProps> = ({ 
   activeTab, 
   setActiveTab, 
-  activeShift, 
-  onOpenShiftModal 
 }) => {
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-white/10 p-4 shrink-0">
-      <div className="flex items-center gap-2 mb-8 p-2">
-        <span className="w-8 h-8 bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20"></span>
-        <h1 className="text-lg font-black tracking-tighter text-slate-900 dark:text-white">SARI-SARI <span className="text-indigo-500">PRO</span></h1>
+    <aside className="hidden md:flex flex-col w-72 bg-white dark:bg-[#020617] border-r border-slate-200 dark:border-white/5 p-6 shrink-0 relative overflow-hidden">
+      {/* Decorative Background Glow */}
+      <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -ml-16 -mt-16"></div>
+      
+      <div className="flex items-center gap-4 mb-12 p-2 relative z-10">
+        <div className="w-12 h-12 bg-indigo-600 rounded-[1.25rem] shadow-2xl shadow-indigo-500/40 flex items-center justify-center rotate-3 hover:rotate-0 transition-transform duration-500">
+          <Terminal className="text-white" size={24} />
+        </div>
+        <div>
+          <h1 className="text-xl font-black tracking-tighter text-slate-900 dark:text-white leading-none">SARI-SARI</h1>
+          <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1">Pro Terminal</p>
+        </div>
       </div>
-      <nav className="flex flex-col gap-1.5 flex-1">
+
+      <nav className="flex flex-col gap-2 flex-1 relative z-10">
+        <p className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em] mb-4 px-4">Main Registry</p>
         {navItems.map(item => (
           <button 
             key={item.id} 
             onClick={() => setActiveTab(item.id)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all relative ${activeTab === item.id ? 'bg-indigo-500 text-white shadow-xl shadow-indigo-500/30 translate-x-1' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+            className={`flex items-center gap-4 px-5 py-4 rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.15em] transition-all duration-500 relative group ${
+              activeTab === item.id 
+                ? 'bg-indigo-600 text-white shadow-[0_15px_30px_rgba(79,70,229,0.3)] translate-x-2' 
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:translate-x-1'
+            }`}
           >
-            {item.icon} {item.label}
+            <div className={`transition-transform duration-500 ${activeTab === item.id ? 'scale-110' : 'group-hover:scale-110'}`}>
+              {item.icon}
+            </div>
+            {item.label}
+            {activeTab === item.id && (
+              <div className="absolute right-4 w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_10px_white]"></div>
+            )}
           </button>
         ))}
       </nav>
-      <div className="mt-auto pt-4 border-t border-slate-100 dark:border-white/5">
-         <button onClick={() => { setActiveTab('pos'); }}
-           className="w-full flex px-3 py-4 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] border border-indigo-500/30 bg-indigo-500/5 text-indigo-500 transition items-center justify-center gap-3 hover:bg-indigo-500 hover:text-white active:scale-95 shadow-lg shadow-indigo-500/10">
-           <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse group-hover:bg-white"></div>
-           Scan & Go Terminal
+
+      <div className="mt-auto pt-8 border-t border-slate-100 dark:border-white/5 relative z-10">
+         <button 
+           onClick={() => setActiveTab('pos')}
+           className="w-full group flex px-6 py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.3em] bg-indigo-600 text-white transition-all duration-500 items-center justify-center gap-4 hover:bg-indigo-500 hover:shadow-[0_20px_40px_rgba(79,70,229,0.4)] hover:-translate-y-1 active:scale-95"
+         >
+           <Zap size={16} className="group-hover:animate-pulse" />
+           Quick Terminal
          </button>
+         <p className="text-center text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.4em] mt-6 opacity-50">
+           System v3.6.2
+         </p>
       </div>
     </aside>
   );
@@ -68,10 +90,23 @@ export const DesktopSidebar: React.FC<NavigationProps> = ({
 
 export const MobileNavigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#0f172a]/95 backdrop-blur-xl border-t border-slate-200 dark:border-white/5 p-2.5 flex justify-around z-40 shadow-2xl">
-      {navItems.map(item => (
-        <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex flex-col items-center justify-center w-12 h-12 rounded-2xl transition-all ${activeTab === item.id ? 'text-indigo-500 bg-indigo-500/5' : 'text-slate-400'}`}>
-          <div className={`transition-all duration-300 ${activeTab === item.id ? 'scale-110' : ''}`}>{item.icon}</div>
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#020617]/95 backdrop-blur-2xl border-t border-slate-200 dark:border-white/5 p-4 flex justify-around z-50 shadow-[0_-20px_40px_rgba(0,0,0,0.1)]">
+      {navItems.slice(0, 5).map(item => (
+        <button 
+          key={item.id} 
+          onClick={() => setActiveTab(item.id)} 
+          className={`flex flex-col items-center justify-center w-14 h-14 rounded-2xl transition-all duration-500 ${
+            activeTab === item.id 
+              ? 'text-indigo-600 bg-indigo-600/10 shadow-inner' 
+              : 'text-slate-400'
+          }`}
+        >
+          <div className={`transition-all duration-500 ${activeTab === item.id ? 'scale-125 -translate-y-1' : ''}`}>
+            {item.icon}
+          </div>
+          {activeTab === item.id && (
+            <div className="w-1 h-1 rounded-full bg-indigo-600 mt-1 animate-in zoom-in"></div>
+          )}
         </button>
       ))}
     </nav>

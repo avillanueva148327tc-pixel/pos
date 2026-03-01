@@ -71,4 +71,30 @@ export class GeminiService {
       return null;
     }
   }
+
+  public static async analyzeProduct(name: string): Promise<Partial<ProductDetails & { price: number }> | null> {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Analyze this product name: "${name}". Suggest a category, unit, and typical retail price in Philippine Pesos (PHP).`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              category: { type: Type.STRING },
+              unit: { type: Type.STRING },
+              price: { type: Type.NUMBER }
+            },
+            required: ["category", "unit", "price"]
+          }
+        }
+      });
+      return JSON.parse(response.text || '{}');
+    } catch (error) {
+      console.error("GeminiService analyzeProduct Error:", error);
+      return null;
+    }
+  }
 }

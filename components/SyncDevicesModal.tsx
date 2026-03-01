@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import BarcodeScanner, { ScanResultStatus } from './BarcodeScanner';
-import { BackupData, InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig } from '../types';
+import { BackupData, InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, Task } from '../types';
 
 // Declare PeerJS global
 declare const Peer: any;
@@ -14,6 +14,7 @@ interface SyncDevicesModalProps {
     inventory: InventoryItem[];
     customers: Customer[];
     records: UtangRecord[];
+    tasks: Task[];
     settings: AppSettings;
     branch: BranchConfig;
   };

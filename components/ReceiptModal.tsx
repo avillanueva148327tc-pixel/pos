@@ -240,15 +240,20 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   if (isPreview) {
     return (
-      <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[250] animate-in fade-in duration-300">
-        <div className="w-full h-full max-w-7xl flex flex-wrap md:flex-nowrap overflow-hidden md:rounded-[2.5rem] bg-[#0f172a] shadow-2xl relative border border-white/5">
+      <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center z-[250] animate-in fade-in duration-500">
+        <div className="w-full h-full max-w-7xl flex flex-wrap md:flex-nowrap overflow-hidden md:rounded-[3.5rem] bg-[#0f172a] shadow-2xl relative border border-white/10">
+          {/* Background Glows */}
+          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-500/10 rounded-full -mr-40 -mt-40 blur-[150px] pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full -ml-20 -mb-20 blur-[120px] pointer-events-none"></div>
           
-          <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-[70] md:hidden bg-[#0f172a]/90 backdrop-blur-md border-b border-white/5">
-            <h3 className="text-white font-black uppercase tracking-widest text-sm">Receipt Studio</h3>
-            <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">✕</button>
+          <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-[70] md:hidden bg-[#0f172a]/90 backdrop-blur-md border-b border-white/5">
+            <h3 className="text-white font-black uppercase tracking-[0.3em] text-xs">Receipt Studio</h3>
+            <button onClick={onClose} className="w-10 h-10 rounded-2xl bg-white/10 text-white flex items-center justify-center hover:bg-white/20">✕</button>
           </div>
           
-          <button onClick={onClose} className="absolute top-6 right-6 z-50 w-12 h-12 rounded-full bg-white/10 text-white hover:bg-rose-500 flex items-center justify-center transition hidden md:flex text-xl font-bold">✕</button>
+          <button onClick={onClose} className="absolute top-8 right-8 z-50 w-14 h-14 rounded-2xl bg-white/5 text-white hover:bg-rose-500 flex items-center justify-center transition-all duration-300 border border-white/10 hover:border-rose-500/50 group/close hidden md:flex text-xl font-bold">
+            <span className="group-hover/close:rotate-90 transition-transform duration-300">✕</span>
+          </button>
 
           {/* PREVIEW CONTAINER */}
           <div 
@@ -272,11 +277,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
           {/* SETTINGS SIDEBAR */}
           <div 
-            className={`flex-[0_0_420px] max-w-full bg-[#0f172a] border-l border-white/5 flex flex-col h-full ${activeTab === 'preview' ? 'hidden md:flex' : 'flex'}`}
+            className={`flex-[0_0_420px] max-w-full bg-[#0f172a]/50 backdrop-blur-3xl border-l border-white/10 flex flex-col h-full relative z-10 ${activeTab === 'preview' ? 'hidden md:flex' : 'flex'}`}
           >
-             <div className="p-6 md:p-8 border-b border-white/5 shrink-0 pt-20 md:pt-8 flex flex-col justify-end min-h-[120px] md:min-h-0">
-                <h2 className="text-2xl font-black text-white tracking-tight">Receipt Studio</h2>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">THEME & FORMATTING</p>
+             <div className="p-10 border-b border-white/5 shrink-0 pt-24 md:pt-10 flex flex-col justify-end min-h-[140px] md:min-h-0">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Engine v4.2</p>
+                </div>
+                <h2 className="text-4xl font-black text-white tracking-tighter leading-none">Receipt Studio</h2>
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.25em] mt-4">THEME & FORMATTING PROTOCOL</p>
              </div>
 
              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar pb-32 md:pb-8 flex flex-col align-content-start">
@@ -309,13 +318,6 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Typography Scaling</h4>
                   
                   <div className="grid grid-cols-2 gap-4">
-                     <div className="col-span-2">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Global Body Size</label>
-                        <div className="flex items-center gap-3">
-                           <input type="range" min="10" max="24" value={receiptTemplate.fontSize} onChange={e => onUpdateSettings?.('fontSize', parseInt(e.target.value))} className="flex-1 accent-primary" />
-                           <span className="text-xs font-black text-white w-8">{receiptTemplate.fontSize}px</span>
-                        </div>
-                     </div>
                      <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Header Size</label>
                         <input type="number" value={receiptTemplate.headerFontSize || 20} onChange={e => onUpdateSettings?.('headerFontSize', parseInt(e.target.value))} className="w-full bg-[#1e293b] border border-slate-700 rounded-xl px-3 py-3 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/50" />

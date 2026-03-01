@@ -32,11 +32,10 @@ export interface ReceiptTemplate {
   headerFontSize?: number;
   itemFontSize?: number;
   layout: ReceiptLayout;
-  accentColor: string;
 }
 
 export type AppLanguage = 'en' | 'tl' | 'bis';
-export type AppTheme = 'light' | 'dark';
+export type AppTheme = 'light' | 'dark' | 'midnight';
 
 export interface AuthConfig {
   adminPin: string;
@@ -83,6 +82,8 @@ export interface Customer {
   contact?: string;
   address?: string;
   creditLimit?: number;
+  notes?: string;
+  trustLevel?: 'bronze' | 'silver' | 'gold';
   createdAt: string;
   barcode?: string;
 }
@@ -132,6 +133,7 @@ export interface UtangRecord {
   paidAmount: number;
   date: string;
   isPaid: boolean;
+  dueDate?: string;
   branchId?: string;
   reminderFrequency?: ReminderFrequency;
   nextReminderDate?: string;
@@ -200,6 +202,15 @@ export interface ActivityLog {
   type: 'info' | 'warning' | 'critical';
 }
 
+export interface Task {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+  dueDate?: string;
+  priority: 'low' | 'medium' | 'high';
+}
+
 export interface BackupData {
   metadata: {
     version: string;
@@ -216,6 +227,7 @@ export interface BackupData {
     branch?: BranchConfig;
     shifts?: ShiftRecord[];
     logs?: ActivityLog[];
+    tasks?: Task[];
   };
 }
 

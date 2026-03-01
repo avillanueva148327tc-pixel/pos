@@ -128,133 +128,191 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
 
   return (
     <>
-      <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[150] p-4 animate-in fade-in">
-        <div className="bg-[#0f172a] w-full max-w-5xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10 flex flex-col md:flex-row">
-          
+      <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center z-[150] p-4 animate-in fade-in duration-500">
+        <div className="bg-[#0f172a] w-full max-w-6xl h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden border border-white/10 flex flex-col md:flex-row relative group">
+          {/* Background Glows */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -mr-32 -mt-32 blur-[120px] group-hover:bg-emerald-500/15 transition-colors duration-1000"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/5 rounded-full -ml-32 -mb-32 blur-[100px]"></div>
+
           {/* Left: Input Form */}
-          <div className="w-full md:w-7/12 p-6 md:p-8 flex flex-col border-b md:border-b-0 md:border-r border-white/5 bg-[#1e293b]">
-             <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-xl font-black text-white uppercase tracking-tight">Log Expense / Stock In</h2>
-                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-1">Record Purchases</p>
+          <div className="w-full md:w-7/12 p-10 flex flex-col border-b md:border-b-0 md:border-r border-white/5 bg-[#0f172a]/50 backdrop-blur-md relative z-10">
+             <div className="flex justify-between items-start mb-10">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.4em]">Inventory Acquisition System</p>
+                  </div>
+                  <h2 className="text-4xl font-black text-white tracking-tighter leading-none">Log Expense</h2>
+                  <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.25em] mt-3 flex items-center gap-2">
+                    <span className="opacity-50">●</span>
+                    RECORD PURCHASES & STOCK
+                  </p>
                 </div>
-                <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 text-slate-400 hover:text-white hover:bg-white/10">✕</button>
+                <button 
+                  onClick={onClose} 
+                  className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 hover:bg-rose-500 hover:text-white transition-all duration-300 border border-white/5 hover:border-rose-500/50 group/close"
+                >
+                  <span className="text-xl group-hover/close:rotate-90 transition-transform duration-300">✕</span>
+                </button>
              </div>
 
-             <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+             <div className="space-y-8 flex-1 overflow-y-auto custom-scrollbar pr-2">
                 
                 {/* Date & Note */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date Bought</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full mt-1 bg-[#0f172a] border border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:border-emerald-500" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] px-1">Acquisition Date</label>
+                    <input 
+                      type="date" 
+                      value={date} 
+                      onChange={e => setDate(e.target.value)} 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" 
+                    />
                   </div>
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Batch Note / Store</label>
-                    <input placeholder="e.g. Puregold, Public Market" value={note} onChange={e => setNote(e.target.value)} className="w-full mt-1 bg-[#0f172a] border border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:border-emerald-500" />
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] px-1">Batch Note / Source</label>
+                    <input 
+                      placeholder="e.g. Puregold, Public Market" 
+                      value={note} 
+                      onChange={e => setNote(e.target.value)} 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" 
+                    />
                   </div>
                 </div>
 
                 {/* Total Cost Override - ADMIN ONLY */}
                 {isAdmin && (
-                  <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20">
-                     <div className="flex justify-between items-center mb-2">
-                       <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Total Receipt Amount</label>
-                       <span className="text-[9px] text-slate-400">Sum of Items: ₱{calculatedTotal.toLocaleString()}</span>
+                  <div className="bg-emerald-500/5 p-8 rounded-[2.5rem] border border-emerald-500/20 relative overflow-hidden group/total">
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 group-hover/total:bg-emerald-500/20 transition-colors"></div>
+                     <div className="flex justify-between items-center mb-4 relative z-10">
+                       <label className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em]">Total Receipt Amount</label>
+                       <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1 rounded-full">Sum: ₱{calculatedTotal.toLocaleString()}</span>
                      </div>
-                     <div className="flex items-center gap-2">
-                        <span className="text-xl font-bold text-emerald-500">₱</span>
+                     <div className="flex items-center gap-4 relative z-10">
+                        <span className="text-3xl font-black text-emerald-500">₱</span>
                         <input 
                           type="text" 
                           inputMode="decimal"
                           placeholder={calculatedTotal > 0 ? calculatedTotal.toString() : "0.00"}
                           value={totalCostOverride} 
                           onChange={e => handleNumericInput(e.target.value, setTotalCostOverride)} 
-                          className="w-full bg-transparent text-3xl font-black text-white outline-none placeholder:text-white/20" 
+                          className="w-full bg-transparent text-5xl font-black text-white outline-none placeholder:text-white/10 tracking-tighter" 
                         />
                      </div>
-                     <p className="text-[9px] text-slate-500 mt-2">Enter the actual amount paid if items are estimates. This amount is recorded as the expense.</p>
+                     <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest mt-4 relative z-10">Enter actual amount paid for accurate expense tracking</p>
                   </div>
                 )}
 
                 {/* Items List */}
-                <div className="space-y-2">
-                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Purchased Items ({items.length})</h3>
+                <div className="space-y-4">
+                   <div className="flex items-center justify-between px-1">
+                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Purchased Items</h3>
+                     <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">{items.length} Entries</span>
+                   </div>
+
                    {items.length === 0 ? (
-                     <div className="p-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
-                       <p className="text-xs text-slate-500 font-bold uppercase">List is empty</p>
-                       <p className="text-[10px] text-slate-600 mt-1">Select products from the right to stock up.</p>
+                     <div className="p-12 text-center border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center gap-4 text-slate-600">
+                       <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-3xl opacity-20">🛒</div>
+                       <div>
+                         <p className="text-[10px] font-black uppercase tracking-[0.3em]">Acquisition list is empty</p>
+                         <p className="text-[8px] font-bold uppercase tracking-widest mt-2 opacity-50">Select products from the catalog to begin</p>
+                       </div>
                      </div>
                    ) : (
-                     items.map((item, idx) => (
-                       <div key={idx} className={`p-3 rounded-xl border flex flex-col gap-2 ${item.type === 'expense' ? 'bg-amber-900/10 border-amber-500/20' : 'bg-[#0f172a] border-white/5'}`}>
-                          <div className="flex justify-between items-center">
-                             <div className="flex-1 min-w-0 pr-2 flex items-center gap-2">
-                                {item.type === 'expense' && <span className="text-amber-500 text-[10px]" title="Expense Only">⚠️</span>}
-                                <div>
-                                  <span className="text-xs font-bold text-white truncate block">{item.name}</span>
-                                  {item.type === 'stock' && (
-                                    <span className="text-[9px] text-emerald-400 font-mono">
-                                      Stock: {item.currentStock || 0} → <b className="text-white">{(item.currentStock || 0) + (parseFloat(item.quantity) || 0)}</b>
-                                    </span>
+                     <div className="space-y-3">
+                       {items.map((item, idx) => (
+                         <div key={idx} className={`group/item p-5 rounded-[2rem] border transition-all duration-300 ${item.type === 'expense' ? 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/40' : 'bg-white/5 border-white/5 hover:border-white/10'}`}>
+                            <div className="flex justify-between items-start mb-4">
+                               <div className="flex-1 min-w-0 pr-4 flex items-center gap-3">
+                                  {item.type === 'expense' ? (
+                                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-500 text-xs">⚠️</div>
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 text-xs">📦</div>
                                   )}
-                                  {item.type === 'expense' && <span className="text-[9px] text-amber-500 font-mono">Expense Record Only</span>}
-                                </div>
-                             </div>
-                             <button onClick={() => removeItem(idx)} className="text-rose-500 text-[10px] font-black uppercase shrink-0 hover:bg-rose-500/10 p-1.5 rounded">Remove</button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                             <div className="flex items-center gap-2 bg-[#1e293b] rounded-lg px-2 py-1 border border-white/5">
-                               <span className="text-[9px] text-slate-500 font-bold uppercase">Qty</span>
-                               <input type="text" inputMode="decimal" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', e.target.value)} className="w-full bg-transparent text-xs font-bold text-white outline-none text-right" />
-                             </div>
-                             {isAdmin && (
-                               <div className="flex items-center gap-2 bg-[#1e293b] rounded-lg px-2 py-1 border border-white/5">
-                                 <span className="text-[9px] text-slate-500 font-bold uppercase">Cost Each</span>
-                                 <input type="text" inputMode="decimal" value={item.costPerUnit} onChange={e => handleItemChange(idx, 'costPerUnit', e.target.value)} className="w-full bg-transparent text-xs font-bold text-white outline-none text-right" placeholder="0.00" />
+                                  <div>
+                                    <span className="text-sm font-black text-white uppercase truncate block tracking-tight">{item.name}</span>
+                                    {item.type === 'stock' && (
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Stock:</span>
+                                        <span className="text-[9px] text-emerald-400 font-black tabular-nums">{item.currentStock || 0} → {(item.currentStock || 0) + (parseFloat(item.quantity) || 0)}</span>
+                                      </div>
+                                    )}
+                                    {item.type === 'expense' && <span className="text-[9px] text-amber-500 font-black uppercase tracking-widest mt-1 block">Expense Record Only</span>}
+                                  </div>
                                </div>
-                             )}
-                          </div>
-                       </div>
-                     ))
+                               <button 
+                                 onClick={() => removeItem(idx)} 
+                                 className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all active:scale-90"
+                               >
+                                 ✕
+                               </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                               <div className="space-y-1.5">
+                                 <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest px-1">Quantity</label>
+                                 <div className="flex items-center gap-3 bg-[#0f172a] rounded-xl px-4 py-2 border border-white/5 focus-within:border-emerald-500/50 transition-colors">
+                                   <input type="text" inputMode="decimal" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', e.target.value)} className="w-full bg-transparent text-xs font-black text-white outline-none text-right tabular-nums" />
+                                 </div>
+                               </div>
+                               {isAdmin && (
+                                 <div className="space-y-1.5">
+                                   <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest px-1">Cost Each (₱)</label>
+                                   <div className="flex items-center gap-3 bg-[#0f172a] rounded-xl px-4 py-2 border border-white/5 focus-within:border-emerald-500/50 transition-colors">
+                                     <input type="text" inputMode="decimal" value={item.costPerUnit} onChange={e => handleItemChange(idx, 'costPerUnit', e.target.value)} className="w-full bg-transparent text-xs font-black text-white outline-none text-right tabular-nums" placeholder="0.00" />
+                                   </div>
+                                 </div>
+                               )}
+                            </div>
+                         </div>
+                       ))}
+                     </div>
                    )}
                 </div>
              </div>
 
-             <div className="mt-6 pt-6 border-t border-white/5">
-                <button onClick={handleSubmit} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-emerald-500 transition active:scale-95 shadow-lg shadow-emerald-900/20">
-                  Confirm Transaction
+             <div className="mt-8 pt-8 border-t border-white/5">
+                <button 
+                  onClick={handleSubmit} 
+                  className="w-full h-20 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] shadow-2xl shadow-emerald-500/40 hover:bg-emerald-500 hover:scale-[1.02] transition-all active:scale-[0.98] flex items-center justify-center gap-4 group/submit"
+                >
+                  <span className="group-hover/submit:translate-x-1 transition-transform">Confirm Transaction</span>
+                  <span className="text-xl">→</span>
                 </button>
              </div>
           </div>
 
           {/* Right: Product Catalog */}
-          <div className="w-full md:w-5/12 p-6 md:p-8 bg-[#020617] flex flex-col">
-             <div className="flex gap-2 mb-4">
-                <div className="relative flex-1">
+          <div className="w-full md:w-5/12 p-10 bg-[#020617]/50 backdrop-blur-xl flex flex-col relative z-10">
+             <div className="flex gap-3 mb-8">
+                <div className="relative flex-1 group/search">
                    <input 
                      placeholder="Search item..." 
-                     className="w-full h-12 bg-[#1e293b] rounded-xl px-4 pl-10 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/50 transition"
+                     className="w-full h-14 bg-white/5 rounded-2xl px-6 pl-12 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all border border-white/5"
                      value={productSearch}
                      onChange={e => setProductSearch(e.target.value)}
                    />
-                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+                   <span className="absolute left-5 top-1/2 -translate-y-1/2 text-lg opacity-50 group-focus-within/search:opacity-100 transition-opacity">🔍</span>
                 </div>
-                <button onClick={() => setShowScanner(true)} className="w-12 h-12 rounded-xl bg-[#1e293b] text-white flex items-center justify-center hover:bg-emerald-600 transition">📸</button>
+                <button 
+                  onClick={() => setShowScanner(true)} 
+                  className="w-14 h-14 rounded-2xl bg-white/5 text-indigo-400 flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all border border-white/5 active:scale-90"
+                >
+                  📸
+                </button>
              </div>
 
-             <div className="flex-1 overflow-y-auto content-start mb-4">
-                <div className="grid grid-cols-1 gap-2">
+             <div className="flex-1 overflow-y-auto custom-scrollbar mb-8 pr-2">
+                <div className="grid grid-cols-1 gap-3">
                   {/* Create New / Custom Options when searching */}
                   {productSearch && (
-                    <div className="grid grid-cols-2 gap-2 mb-4 animate-in fade-in">
-                       <button onClick={() => onCreateNewItem(productSearch)} className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-left hover:bg-indigo-500/20 transition group">
-                          <p className="text-[9px] font-black text-indigo-400 uppercase mb-1">New Inventory Item</p>
-                          <p className="text-xs font-bold text-white">Create "{productSearch}"</p>
+                    <div className="grid grid-cols-1 gap-3 mb-6 animate-in slide-in-from-top-4 duration-500">
+                       <button onClick={() => onCreateNewItem(productSearch)} className="p-5 bg-indigo-500/10 border border-indigo-500/30 rounded-[1.5rem] text-left hover:bg-indigo-500/20 transition-all group/new">
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">New Inventory Item</p>
+                          <p className="text-sm font-black text-white group-hover:translate-x-1 transition-transform">Create "{productSearch}"</p>
                        </button>
-                       <button onClick={handleAddExpenseItem} className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-left hover:bg-amber-500/20 transition group">
-                          <p className="text-[9px] font-black text-amber-400 uppercase mb-1">One-off Expense</p>
-                          <p className="text-xs font-bold text-white">Log "{productSearch}"</p>
+                       <button onClick={handleAddExpenseItem} className="p-5 bg-amber-500/10 border border-amber-500/30 rounded-[1.5rem] text-left hover:bg-amber-500/20 transition-all group/exp">
+                          <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">One-off Expense</p>
+                          <p className="text-sm font-black text-white group-hover:translate-x-1 transition-transform">Log "{productSearch}"</p>
                        </button>
                     </div>
                   )}
@@ -263,37 +321,37 @@ const AddBatchModal: React.FC<AddBatchModalProps> = ({ inventory, onAddBatch, on
                     <button 
                       key={item.id} 
                       onClick={() => handleAddInventoryItem(item)}
-                      className="p-3 bg-[#1e293b] rounded-xl border border-white/5 flex items-center gap-3 hover:border-emerald-500/50 transition active:scale-[0.98] group text-left"
+                      className="p-4 bg-white/5 rounded-[1.5rem] border border-white/5 flex items-center gap-4 hover:border-emerald-500/50 hover:bg-white/[0.08] transition-all active:scale-[0.98] group text-left"
                     >
-                       <div className="w-10 h-10 bg-[#0f172a] rounded-lg flex items-center justify-center text-lg shrink-0 group-hover:scale-110 transition-transform">
-                          {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover rounded-lg" /> : '📦'}
+                       <div className="w-12 h-12 bg-[#0f172a] rounded-xl flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition-transform border border-white/5 overflow-hidden">
+                          {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover" /> : '📦'}
                        </div>
                        <div className="flex-1 min-w-0">
-                         <p className="text-xs font-black text-white uppercase truncate">{item.name}</p>
-                         <div className="flex justify-between items-center mt-0.5">
-                            <p className="text-[9px] text-slate-500">Stock: {item.stock}</p>
-                            {isAdmin && <p className="text-[9px] font-bold text-emerald-500">Cost: ₱{item.originalPrice?.toFixed(2) || '?'}</p>}
+                         <p className="text-xs font-black text-white uppercase truncate tracking-tight">{item.name}</p>
+                         <div className="flex justify-between items-center mt-1">
+                            <p className="text-[9px] text-slate-500 font-bold uppercase">Stock: {item.stock}</p>
+                            {isAdmin && <p className="text-[9px] font-black text-emerald-500">₱{item.originalPrice?.toFixed(2) || '?'}</p>}
                          </div>
                        </div>
-                       <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-white text-xs group-hover:bg-emerald-500 transition">+</div>
+                       <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white text-xs group-hover:bg-emerald-500 group-hover:rotate-90 transition-all">+</div>
                     </button>
                   ))}
                   
                   {filteredInventory.length === 0 && !productSearch && (
-                     <div className="text-center py-10 opacity-30">
-                        <p className="text-xs font-bold">No items found</p>
+                     <div className="text-center py-20 opacity-20">
+                        <p className="text-xs font-black uppercase tracking-[0.3em]">No items found</p>
                      </div>
                   )}
                 </div>
              </div>
              
-             <div className="p-4 bg-slate-900 rounded-2xl border border-white/5 text-center">
-                <p className="text-[9px] text-slate-500 font-bold mb-2">QUICK ACTIONS</p>
-                <div className="flex gap-2 justify-center">
-                   <button onClick={() => onCreateNewItem('')} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black text-white uppercase transition border border-white/5">
+             <div className="p-6 bg-white/5 rounded-[2rem] border border-white/5 text-center">
+                <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.4em] mb-4">Quick Protocols</p>
+                <div className="flex gap-3 justify-center">
+                   <button onClick={() => onCreateNewItem('')} className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-black text-white uppercase tracking-widest transition-all border border-white/5 active:scale-95">
                      + New Product
                    </button>
-                   <button onClick={() => { setProductSearch('Transport'); }} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black text-white uppercase transition border border-white/5">
+                   <button onClick={() => { setProductSearch('Transport'); }} className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-black text-white uppercase tracking-widest transition-all border border-white/5 active:scale-95">
                      + Fare/Gas
                    </button>
                 </div>

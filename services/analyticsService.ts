@@ -48,5 +48,46 @@ export const AnalyticsService = {
     return Object.entries(cats)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value); // Order by highest value
+  },
+
+  /**
+   * Calculates debt aging based on due dates.
+   */
+  getDebtAgingStats: (records: UtangRecord[]) => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const aging = {
+      overdue: 0,
+      dueToday: 0,
+      upcoming: 0,
+      noDueDate: 0
+    };
+
+    records.filter(r => !r.isPaid).forEach(r => {
+      const balance = r.totalAmount - r.paidAmount;
+      if (!r.dueDate) {
+        aging.noDueDate += balance;
+        return;
+      }
+
+      const dueDate = new Date(r.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+
+      if (dueDate < now) {
+        aging.overdue += balance;
+      } else if (dueDate.getTime() === now.getTime()) {
+        aging.dueToday += balance;
+      } else {
+        aging.upcoming += balance;
+      }
+    });
+
+    return [
+      { name: 'Overdue', value: aging.overdue, color: '#ef4444' },
+      { name: 'Due Today', value: aging.dueToday, color: '#f59e0b' },
+      { name: 'Upcoming', value: aging.upcoming, color: '#10b981' },
+      { name: 'No Due Date', value: aging.noDueDate, color: '#64748b' }
+    ].filter(item => item.value > 0);
   }
 };

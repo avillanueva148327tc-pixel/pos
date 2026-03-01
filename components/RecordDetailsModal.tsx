@@ -157,6 +157,7 @@ const RecordDetailsModal: React.FC<RecordDetailsModalProps> = ({ record, onClose
             <>
               <button onClick={() => onAction('payFull', record)} className="flex-[2] py-4 bg-[#6366f1] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-500/20 transition hover:scale-[1.02] active:scale-95">Settle Full Balance</button>
               <button onClick={() => onAction('partial', record)} className="flex-1 py-4 bg-[#1e293b] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition hover:bg-slate-700 active:scale-95 border border-white/5">Partial Pay</button>
+              <button onClick={() => onAction('reminder', record)} className="flex-1 py-4 bg-indigo-500/10 text-indigo-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition hover:bg-indigo-500/20 active:scale-95 border border-indigo-500/20">🔔 Reminder</button>
             </>
           )}
           

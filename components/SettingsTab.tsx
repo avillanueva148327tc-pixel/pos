@@ -36,11 +36,11 @@ const SettingsGroup: React.FC<{ children?: React.ReactNode, title: string, icon:
         <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ring-1 ${level === 2 ? 'bg-indigo-500/10 ring-indigo-500/20 text-indigo-500' : 'bg-slate-500/10 ring-slate-500/20 text-slate-500'}`}>
           {icon}
         </div>
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{title}</h4>
+        <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">{title}</h4>
       </div>
       {level === 2 && <span className="text-[7px] font-black text-indigo-500 border border-indigo-500/20 px-2 py-0.5 rounded-full uppercase">Lvl 2 Auth</span>}
     </div>
-    <div className="grid grid-cols-1 gap-2">
+    <div className="grid grid-cols-1 gap-3">
       {children}
     </div>
   </div>
@@ -64,10 +64,10 @@ const ActionCard: React.FC<{
   return (
     <div 
       onClick={(!isToggle && !onDelete && !isLocked) ? onClick : undefined}
-      className={`group relative flex items-center justify-between p-4 bg-white dark:bg-[#1e293b]/50 border border-slate-200 dark:border-white/5 rounded-3xl transition-all duration-300 ${(!isToggle && !onDelete && !isLocked) ? 'cursor-pointer hover:border-indigo-500/50 hover:bg-slate-50 dark:hover:bg-white/[0.03] active:scale-[0.99] shadow-sm' : ''} ${isLocked ? 'opacity-50 select-none' : ''}`}
+      className={`group relative flex items-center justify-between p-4 bg-white dark:bg-[#1e293b]/50 border border-slate-200 dark:border-white/10 rounded-2xl transition-all duration-300 ${(!isToggle && !onDelete && !isLocked) ? 'cursor-pointer hover:border-indigo-500/50 hover:bg-slate-50 dark:hover:bg-white/[0.03] active:scale-[0.99] shadow-sm' : ''} ${isLocked ? 'opacity-50 select-none' : ''}`}
     >
       <div className="flex items-center gap-4 min-w-0">
-        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl transition-all ${isDanger ? 'bg-rose-500/10 text-rose-500' : 'bg-slate-100 dark:bg-[#0f172a] text-slate-600 dark:text-slate-300 group-hover:scale-110'}`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-all ${isDanger ? 'bg-rose-500/10 text-rose-500' : 'bg-slate-100 dark:bg-[#0f172a] text-slate-600 dark:text-slate-300 group-hover:scale-110'}`}>
           {icon}
         </div>
         <div className="flex flex-col min-w-0">
@@ -80,10 +80,10 @@ const ActionCard: React.FC<{
 
       <div className="flex items-center gap-3 shrink-0">
         {status && <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[8px] font-black uppercase">{status}</span>}
-        {value !== undefined && !isToggle && !onDelete && <span className="text-[10px] font-black text-indigo-500 bg-indigo-500/5 px-2 py-1 rounded-lg">{value}</span>}
+        {value !== undefined && !isToggle && !onDelete && <span className="text-[10px] font-black text-indigo-500 bg-indigo-500/5 px-2 py-1 rounded-lg border border-indigo-500/10">{value}</span>}
         {isToggle && (
-          <div onClick={(e) => { if (!isLocked) { e.preventDefault(); e.stopPropagation(); onClick?.(e); }}} className={`w-11 h-6 rounded-full p-1 transition-colors ${isLocked ? 'cursor-not-allowed grayscale opacity-50' : 'cursor-pointer'} ${toggleValue ? 'bg-indigo-500' : 'bg-slate-200 dark:bg-slate-800'}`}>
-            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-300 ${toggleValue ? 'translate-x-5' : ''}`} />
+          <div onClick={(e) => { if (!isLocked) { e.preventDefault(); e.stopPropagation(); onClick?.(e); }}} className={`w-10 h-6 rounded-full p-1 transition-colors ${isLocked ? 'cursor-not-allowed grayscale opacity-50' : 'cursor-pointer'} ${toggleValue ? 'bg-indigo-500' : 'bg-slate-200 dark:bg-slate-800'}`}>
+            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-300 ${toggleValue ? 'translate-x-4' : ''}`} />
           </div>
         )}
       </div>
@@ -130,17 +130,17 @@ const SettingsTab: React.FC<SettingsTabProps> = (props) => {
         </SettingsGroup>
 
         <SettingsGroup title="Interface" icon="🎨">
-          <ActionCard label="Midnight Mode" icon="🌗" isToggle toggleValue={settings.theme === 'dark'} onClick={onToggleTheme} status={settings.theme === 'dark' ? 'On' : 'Off'} />
+          <ActionCard 
+            label="Theme Mode" 
+            icon={settings.theme === 'midnight' ? '🌑' : settings.theme === 'dark' ? '🌗' : '☀️'} 
+            value={settings.theme.toUpperCase()} 
+            onClick={onToggleTheme} 
+          />
           <ActionCard label="Compact Mode" icon="📏" isToggle toggleValue={settings.uiCustomization.compactMode} onClick={() => onUpdateSettings('uiCustomization.compactMode', !settings.uiCustomization.compactMode)} status={settings.uiCustomization.compactMode ? 'On' : 'Off'} />
           <ActionCard label="Font Family" icon="🔤" value={settings.uiCustomization.fontFamily} onClick={() => {
             const currentIdx = fontFamilies.indexOf(settings.uiCustomization.fontFamily);
             const nextIdx = (currentIdx + 1) % fontFamilies.length;
             onUpdateSettings('uiCustomization.fontFamily', fontFamilies[nextIdx]);
-          }} />
-          <ActionCard label="Font Size" icon="🅰️" value={settings.uiCustomization.fontSize.toUpperCase()} onClick={() => {
-            const currentIdx = fontSizes.indexOf(settings.uiCustomization.fontSize);
-            const nextIdx = (currentIdx + 1) % fontSizes.length;
-            onUpdateSettings('uiCustomization.fontSize', fontSizes[nextIdx]);
           }} />
           <ActionCard label="System Language" icon="🌍" value={settings.language.toUpperCase()} onClick={onCycleLanguage} />
           <ActionCard label="Manual" icon="📖" onClick={() => setShowGuide(true)} />

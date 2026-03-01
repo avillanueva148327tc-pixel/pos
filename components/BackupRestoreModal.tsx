@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, BackupData, ShiftRecord } from '../types';
+import { InventoryItem, Customer, UtangRecord, AppSettings, BranchConfig, BackupData, ShiftRecord, Task } from '../types';
 
 interface BackupRestoreModalProps {
   onClose: () => void;
   inventory: InventoryItem[];
   customers: Customer[];
   records: UtangRecord[];
+  tasks: Task[];
   settings: AppSettings;
   branch: BranchConfig;
   shiftHistory: ShiftRecord[];
@@ -74,7 +75,7 @@ interface RestoreStats {
 }
 
 const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
-  onClose, inventory, customers, records, settings, branch, shiftHistory, onRestore, lastSaved
+  onClose, inventory, customers, records, tasks, settings, branch, shiftHistory, onRestore, lastSaved
 }) => {
   const [activeTab, setActiveTab] = useState<'backup' | 'restore'>('backup');
   const [dragActive, setDragActive] = useState(false);
@@ -85,6 +86,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     customers: true,
     records: true,
     shifts: true,
+    tasks: true,
     settings: true
   });
   
@@ -121,6 +123,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       if (selectedModules.customers) exportPayload.data.customers = customers;
       if (selectedModules.records) exportPayload.data.records = records;
       if (selectedModules.shifts) exportPayload.data.shifts = shiftHistory;
+      if (selectedModules.tasks) exportPayload.data.tasks = tasks;
       if (selectedModules.settings) {
         exportPayload.data.settings = settings;
         exportPayload.data.branch = branch;
@@ -250,6 +253,11 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       if (data.shifts) {
         data.shifts.forEach((s: ShiftRecord) => 
           shiftHistory.some(ex => ex.id === s.id) ? updates++ : newItems++
+        );
+      }
+      if (data.tasks) {
+        data.tasks.forEach((t: any) => 
+          tasks.some(ex => ex.id === t.id) ? updates++ : newItems++
         );
       }
 
